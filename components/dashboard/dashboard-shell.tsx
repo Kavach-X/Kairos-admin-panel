@@ -24,7 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { AdminPortalContext } from "@/lib/session";
 import { authClient } from "@/lib/auth-client";
 import { signOutAdmin } from "@/lib/actions/auth.actions";
@@ -32,12 +32,12 @@ import { useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
+  User,
   HardDrive,
   Building2,
   Store,
   Ticket,
   Activity,
-  Settings,
   LogOut,
   ChevronUp,
   CreditCard,
@@ -69,9 +69,9 @@ const NAV_ITEMS = [
     ],
   },
   {
-    group: "System",
+    group: "Account",
     items: [
-      { label: "Settings", href: "/dashboard/settings", icon: Settings },
+      { label: "My Account", href: "/dashboard/account", icon: User },
     ],
   },
 ];
@@ -169,6 +169,9 @@ export function DashboardShell({ adminContext, children }: DashboardShellProps) 
                   render={
                     <SidebarMenuButton size="default" className="h-10 rounded-md px-2 hover:bg-muted/50">
                       <Avatar className="size-6 shrink-0 border border-border/60">
+                        {user.image ? (
+                          <AvatarImage src={user.image} alt={user.name || "User"} />
+                        ) : null}
                         <AvatarFallback className="text-[10px] font-medium bg-muted">
                           {initials}
                         </AvatarFallback>
@@ -203,11 +206,11 @@ export function DashboardShell({ adminContext, children }: DashboardShellProps) 
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    render={<Link href="/dashboard/settings" />}
+                    render={<Link href="/dashboard/account" />}
                     className="text-xs py-1.5"
                   >
-                    <Settings className="mr-2 size-3.5 stroke-[1.75]" />
-                    <span>System Settings</span>
+                    <User className="mr-2 size-3.5 stroke-[1.75]" />
+                    <span>Account Profile</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -260,7 +263,7 @@ function getPageTitle(pathname: string): string {
     "/dashboard/customers": "Customers",
     "/dashboard/tickets": "Tickets",
     "/dashboard/bank-details": "Bank Details",
-    "/dashboard/settings": "Settings",
+    "/dashboard/account": "My Account",
   };
   return titles[pathname] || "Dashboard";
 }

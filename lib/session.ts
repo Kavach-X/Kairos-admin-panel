@@ -15,6 +15,10 @@ export interface AdminPortalContext {
     name: string;
     email: string;
     phoneNumber: string | null;
+    image?: string | null;
+    emailVerified?: boolean;
+    phoneNumberVerified?: boolean;
+    createdAt?: string;
   };
   account: {
     id: string;
@@ -38,7 +42,9 @@ async function buildAuthHeaders(): Promise<Record<string, string> | null> {
   const headersList = await headers();
   const incomingCookie = headersList.get("cookie") || "";
   const cookieStore = await cookies();
-  const token = cookieStore.get("better-auth.session_token")?.value;
+  const token =
+    cookieStore.get("better-auth.session_token")?.value ||
+    cookieStore.get("__Secure-better-auth.session_token")?.value;
 
   const reqHeaders: Record<string, string> = {
     "Content-Type": "application/json",
@@ -52,8 +58,8 @@ async function buildAuthHeaders(): Promise<Record<string, string> | null> {
     reqHeaders["authorization"] = `Bearer ${token}`;
     if (!incomingCookie.includes("better-auth.session_token")) {
       reqHeaders["cookie"] = incomingCookie
-        ? `${incomingCookie}; better-auth.session_token=${token}`
-        : `better-auth.session_token=${token}`;
+        ? `${incomingCookie}; better-auth.session_token=${token}; __Secure-better-auth.session_token=${token}`
+        : `better-auth.session_token=${token}; __Secure-better-auth.session_token=${token}`;
     }
   }
 
