@@ -182,9 +182,25 @@ export function DeviceDetailsSheet({
                 <span className="text-foreground">{currentDevice.wlan_mac || "None"}</span>
               </div>
               <div>
+                <span className="text-[10px] text-muted-foreground block font-sans">Bluetooth MAC</span>
+                <span className="text-foreground">{currentDevice.ble_mac || "None"}</span>
+              </div>
+              <div>
                 <span className="text-[10px] text-muted-foreground block font-sans">CPU Serial</span>
                 <span className="text-foreground truncate block" title={currentDevice.soc_serial || "N/A"}>
                   {currentDevice.soc_serial || "N/A"}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-muted-foreground block font-sans">SoC ID</span>
+                <span className="text-foreground truncate block" title={currentDevice.soc_id || "N/A"}>
+                  {currentDevice.soc_id || "N/A"}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-muted-foreground block font-sans">Storage Serial</span>
+                <span className="text-foreground truncate block" title={currentDevice.storage_serial || "N/A"}>
+                  {currentDevice.storage_serial || "N/A"}
                 </span>
               </div>
               <div>
@@ -232,6 +248,22 @@ export function DeviceDetailsSheet({
                   {currentDevice.installedByVendor?.name || "None (Direct)"}
                 </span>
               </div>
+              {currentDevice.installation_address && (
+                <div className="flex justify-between items-start pt-2 border-t border-border/40 gap-3">
+                  <span className="text-muted-foreground shrink-0">Install Address:</span>
+                  <span className="font-medium text-foreground text-right">
+                    {currentDevice.installation_address}
+                  </span>
+                </div>
+              )}
+              {currentDevice.installation_notes && (
+                <div className="flex flex-col gap-1 pt-2 border-t border-border/40">
+                  <span className="text-muted-foreground">Install Notes:</span>
+                  <span className="font-medium text-foreground whitespace-pre-wrap">
+                    {currentDevice.installation_notes}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 

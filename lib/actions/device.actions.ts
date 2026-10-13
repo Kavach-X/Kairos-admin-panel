@@ -8,6 +8,7 @@ import type {
   DeviceModel,
   DeviceListResult,
   FactoryRegisterPayload,
+  DeviceRegisterToken,
 } from "@/lib/types";
 
 const BACKEND_URL =
@@ -225,6 +226,33 @@ export async function factoryRegisterDeviceAction(
     return { success: true, data: json.data as Device };
   } catch (err: any) {
     return { success: false, error: err?.message || "Network error registering device" };
+  }
+}
+
+// ─── 3b. Device Self-Registration Tokens (factory-floor, no admin credential) ──
+
+export async function generateDeviceRegisterTokenAction(
+  deviceModel: string
+): Promise<{ success: boolean; data?: DeviceRegisterToken; error?: string }> {
+  try {
+    const reqHeaders = await getAdminHeaders();
+    const res = await fetch(`${BACKEND_URL}/api/v1/devices/device-register-tokens`, {
+      method: "POST",
+      headers: reqHeaders,
+      body: JSON.stringify({ device_model: deviceModel }),
+    });
+
+    const json = await res.json();
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json?.message || "Failed to generate registration token",
+      };
+    }
+
+    return { success: true, data: json.data as DeviceRegisterToken };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Network error generating token" };
   }
 }
 

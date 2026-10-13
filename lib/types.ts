@@ -138,6 +138,7 @@ export interface Device {
   machine: string | null;
   eth_mac: string;
   wlan_mac: string | null;
+  ble_mac: string | null;
   soc_id: string | null;
   soc_serial: string | null;
   storage_serial: string | null;
@@ -213,11 +214,19 @@ export interface FactoryRegisterPayload {
   raw_secret: string;
   eth_mac: string;
   wlan_mac?: string;
+  ble_mac: string;
   machine?: string;
   soc_id?: string;
   soc_serial?: string;
   storage_serial?: string;
   metadata?: Record<string, unknown>;
+}
+
+// ─── Device Self-Registration Tokens (factory-floor, no admin credential) ──
+export interface DeviceRegisterToken {
+  token: string;
+  device_model: string;
+  expires_at: string;
 }
 
 export type AccountStatus = "ACTIVE" | "SUSPENDED" | "PENDING_VERIFICATION" | "CLOSED";

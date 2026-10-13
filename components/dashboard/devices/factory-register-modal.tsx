@@ -19,11 +19,17 @@ import {
   Check,
   CheckCircle2,
   AlertCircle,
-  Terminal,
-  FileCode2,
+  Timer,
+  QrCode,
+  ClipboardList,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
-import type { DeviceModel, FactoryRegisterPayload } from "@/lib/types";
-import { factoryRegisterDeviceAction } from "@/lib/actions/device.actions";
+import type { DeviceModel, FactoryRegisterPayload, DeviceRegisterToken } from "@/lib/types";
+import {
+  factoryRegisterDeviceAction,
+  generateDeviceRegisterTokenAction,
+} from "@/lib/actions/device.actions";
 
 interface FactoryRegisterModalProps {
   open: boolean;
@@ -41,39 +47,70 @@ function generateSecret(): string {
   return secret;
 }
 
+function formatCountdown(msRemaining: number): string {
+  if (msRemaining <= 0) return "Expired";
+  const totalSeconds = Math.floor(msRemaining / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
 export function FactoryRegisterModal({
   open,
   onOpenChange,
   models,
   onSuccess,
 }: FactoryRegisterModalProps) {
-  const [mode, setMode] = React.useState<"form" | "edgebox">("form");
+  const [mode, setMode] = React.useState<"token" | "manual">("token");
 
+  // ─── Token tab state ───────────────────────────────────────────────
+  const [tokenModelCode, setTokenModelCode] = React.useState("");
+  const [tokenLoading, setTokenLoading] = React.useState(false);
+  const [tokenError, setTokenError] = React.useState<string | null>(null);
+  const [issuedToken, setIssuedToken] = React.useState<DeviceRegisterToken | null>(null);
+  const [copiedToken, setCopiedToken] = React.useState(false);
+  const [nowTick, setNowTick] = React.useState(() => Date.now());
+
+  // ─── Manual tab state ──────────────────────────────────────────────
   const [deviceId, setDeviceId] = React.useState("");
   const [modelCode, setModelCode] = React.useState("");
   const [rawSecret, setRawSecret] = React.useState("");
   const [ethMac, setEthMac] = React.useState("");
+  const [bleMac, setBleMac] = React.useState("");
   const [socSerial, setSocSerial] = React.useState("");
+  const [wlanMac, setWlanMac] = React.useState("");
+  const [machine, setMachine] = React.useState("");
+  const [socId, setSocId] = React.useState("");
+  const [storageSerial, setStorageSerial] = React.useState("");
+  const [showAdvanced, setShowAdvanced] = React.useState(false);
 
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [registeredSuccess, setRegisteredSuccess] = React.useState<boolean>(false);
   const [copiedSecret, setCopiedSecret] = React.useState(false);
   const [copiedConfig, setCopiedConfig] = React.useState(false);
-  const [copiedCmd, setCopiedCmd] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) {
       setDeviceId("");
       setEthMac("");
+      setBleMac("");
       setSocSerial("");
+      setWlanMac("");
+      setMachine("");
+      setSocId("");
+      setStorageSerial("");
+      setShowAdvanced(false);
       setRawSecret("");
       setError(null);
       setRegisteredSuccess(false);
-      setMode("form");
+      setMode("token");
+      setIssuedToken(null);
+      setTokenError(null);
     } else {
       if (models.length > 0) {
         setModelCode(models[0].code);
+        setTokenModelCode(models[0].code);
       }
       setRawSecret(generateSecret());
       setError(null);
@@ -81,40 +118,39 @@ export function FactoryRegisterModal({
     }
   }, [open, models]);
 
+  // Live countdown tick while a token is on screen
+  React.useEffect(() => {
+    if (!issuedToken) return;
+    const interval = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [issuedToken]);
+
   const envSnippet = `# /etc/kairos/device.env
 KAIROS_DEVICE_ID="${deviceId}"
 KAIROS_DEVICE_SECRET="${rawSecret}"
 KAIROS_MODEL_CODE="${modelCode}"
 `;
 
-  const edgeboxAutoCmd = `# Run directly in EdgeBox terminal:
-ETH_MAC=$(cat /sys/class/net/eth0/address 2>/dev/null || cat /sys/class/net/eth*/address 2>/dev/null | head -n1)
-SOC_SR=$(cat /proc/cpuinfo | grep -m1 "Serial" | awk '{print $3}')
-DEV_ID="KBX-$(echo $ETH_MAC | tr -d ':' | tail -c 5 | tr 'a-z' 'A-Z')"
-SEC=$(openssl rand -hex 12)
+  const msRemaining = issuedToken ? new Date(issuedToken.expires_at).getTime() - nowTick : 0;
+  const tokenExpired = issuedToken ? msRemaining <= 0 : false;
 
-echo "Device ID: $DEV_ID"
-echo "MAC: $ETH_MAC"
+  async function handleGenerateToken() {
+    setTokenError(null);
+    if (!tokenModelCode) {
+      setTokenError("Please select a device model");
+      return;
+    }
 
-# Register into cloud
-curl -s -X POST "https://kairos-backend-351319738025.asia-south1.run.app/api/v1/devices/factory-register" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "device_id": "'$DEV_ID'",
-    "model_code": "RADXA_DRAGON_Q6A",
-    "raw_secret": "'$SEC'",
-    "eth_mac": "'$ETH_MAC'",
-    "soc_serial": "'$SOC_SR'"
-  }'
+    setTokenLoading(true);
+    const res = await generateDeviceRegisterTokenAction(tokenModelCode);
+    setTokenLoading(false);
 
-# Save local identity
-mkdir -p /etc/kairos
-cat <<EOF > /etc/kairos/device.env
-KAIROS_DEVICE_ID="$DEV_ID"
-KAIROS_DEVICE_SECRET="$SEC"
-EOF
-echo "Device registered and configured!"
-`;
+    if (!res.success || !res.data) {
+      setTokenError(res.error || "Failed to generate registration token");
+      return;
+    }
+    setIssuedToken(res.data);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -137,6 +173,18 @@ echo "Device registered and configured!"
       setError("Invalid MAC address (e.g. 00:1A:2B:3C:4D:5E)");
       return;
     }
+    if (!bleMac.trim()) {
+      setError("Bluetooth MAC is required — the mobile app connects to the device over BLE using this address");
+      return;
+    }
+    if (!macRegex.test(bleMac.trim())) {
+      setError("Invalid Bluetooth MAC address (e.g. 00:1A:2B:3C:4D:5E)");
+      return;
+    }
+    if (wlanMac.trim() && !macRegex.test(wlanMac.trim())) {
+      setError("Invalid WLAN MAC address (e.g. 00:1A:2B:3C:4D:5E)");
+      return;
+    }
 
     setLoading(true);
     const payload: FactoryRegisterPayload = {
@@ -144,7 +192,12 @@ echo "Device registered and configured!"
       model_code: modelCode,
       raw_secret: rawSecret.trim(),
       eth_mac: ethMac.trim().toLowerCase(),
+      ble_mac: bleMac.trim().toLowerCase(),
       soc_serial: socSerial.trim() || undefined,
+      wlan_mac: wlanMac.trim().toLowerCase() || undefined,
+      machine: machine.trim() || undefined,
+      soc_id: socId.trim() || undefined,
+      storage_serial: storageSerial.trim() || undefined,
     };
 
     const res = await factoryRegisterDeviceAction(payload);
@@ -162,9 +215,17 @@ echo "Device registered and configured!"
     setDeviceId("");
     setRawSecret(generateSecret());
     setEthMac("");
+    setBleMac("");
     setSocSerial("");
+    setWlanMac("");
+    setMachine("");
+    setSocId("");
+    setStorageSerial("");
+    setShowAdvanced(false);
     setRegisteredSuccess(false);
     setError(null);
+    setIssuedToken(null);
+    setTokenError(null);
     onOpenChange(false);
   }
 
@@ -189,22 +250,23 @@ echo "Device registered and configured!"
             <div className="flex items-center gap-1 mt-3 p-1 bg-muted/60 rounded-md">
               <button
                 type="button"
-                onClick={() => setMode("form")}
-                className={`flex-1 py-1 text-xs font-medium rounded transition-colors ${
-                  mode === "form" ? "bg-card text-foreground shadow-xs" : "text-muted-foreground"
+                onClick={() => setMode("token")}
+                className={`flex-1 py-1 text-xs font-medium rounded transition-colors flex items-center justify-center gap-1.5 ${
+                  mode === "token" ? "bg-card text-foreground shadow-xs" : "text-muted-foreground"
                 }`}
               >
-                Manual Form
+                <QrCode className="h-3 w-3" />
+                Factory Token
               </button>
               <button
                 type="button"
-                onClick={() => setMode("edgebox")}
+                onClick={() => setMode("manual")}
                 className={`flex-1 py-1 text-xs font-medium rounded transition-colors flex items-center justify-center gap-1.5 ${
-                  mode === "edgebox" ? "bg-card text-foreground shadow-xs" : "text-muted-foreground"
+                  mode === "manual" ? "bg-card text-foreground shadow-xs" : "text-muted-foreground"
                 }`}
               >
-                <Terminal className="h-3 w-3" />
-                Run on EdgeBox (1-Command)
+                <ClipboardList className="h-3 w-3" />
+                Manual Form
               </button>
             </div>
           )}
@@ -225,7 +287,7 @@ echo "Device registered and configured!"
             <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 p-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                  <FileCode2 className="h-3.5 w-3.5 text-primary" />
+                  <KeyRound className="h-3.5 w-3.5 text-primary" />
                   Device Config (/etc/kairos/device.env)
                 </span>
                 <Button
@@ -253,34 +315,107 @@ echo "Device registered and configured!"
               </Button>
             </DialogFooter>
           </div>
-        ) : mode === "edgebox" ? (
-          <div className="flex flex-col gap-3 py-2">
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              If you have SSH or terminal access to the edgebox, run this command on the device. It reads the MAC and CPU serial automatically and registers into stock:
-            </p>
-            <div className="relative rounded-lg border border-border bg-muted/60 p-3">
-              <Button
-                size="sm"
-                variant="outline"
-                className="absolute top-2.5 right-2.5 h-7 text-xs gap-1 bg-background"
-                onClick={() => {
-                  navigator.clipboard.writeText(edgeboxAutoCmd);
-                  setCopiedCmd(true);
-                  setTimeout(() => setCopiedCmd(false), 2000);
-                }}
-              >
-                {copiedCmd ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-                {copiedCmd ? "Copied" : "Copy Command"}
-              </Button>
-              <pre className="text-[11px] font-mono overflow-x-auto text-foreground pr-20 pt-1 leading-relaxed">
-                {edgeboxAutoCmd}
-              </pre>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
-                Close
-              </Button>
-            </DialogFooter>
+        ) : mode === "token" ? (
+          <div className="flex flex-col gap-3.5 py-1">
+            {tokenError && (
+              <div className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-2.5 text-xs text-destructive">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{tokenError}</span>
+              </div>
+            )}
+
+            {!issuedToken ? (
+              <>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Generate a short-lived, one-time code. Type it into the factory-floor script running on the EdgeBox — the device registers itself with no admin credential needed.
+                </p>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-foreground">
+                    Device Model <span className="text-destructive">*</span>
+                  </label>
+                  <select
+                    value={tokenModelCode}
+                    onChange={(e) => setTokenModelCode(e.target.value)}
+                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    required
+                  >
+                    {models.length === 0 ? (
+                      <option value="">No models available</option>
+                    ) : (
+                      models.map((m) => (
+                        <option key={m.code} value={m.code}>
+                          {m.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                <DialogFooter className="mt-2">
+                  <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={tokenLoading}>
+                    Cancel
+                  </Button>
+                  <Button type="button" onClick={handleGenerateToken} disabled={tokenLoading} className="gap-2">
+                    {tokenLoading && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+                    {tokenLoading ? "Generating..." : "Generate Token"}
+                  </Button>
+                </DialogFooter>
+              </>
+            ) : (
+              <>
+                <div
+                  className={`rounded-lg border p-3.5 ${
+                    tokenExpired
+                      ? "border-destructive/20 bg-destructive/10"
+                      : "border-emerald-500/20 bg-emerald-500/10"
+                  }`}
+                >
+                  <div
+                    className={`flex items-center gap-2 font-medium text-xs ${
+                      tokenExpired ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"
+                    }`}
+                  >
+                    <Timer className="h-4 w-4" />
+                    {tokenExpired ? "Token expired" : `Expires in ${formatCountdown(msRemaining)}`}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Reserved for model <strong>{issuedToken.device_model}</strong>. Single use only.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 p-4">
+                  <span className="text-xs font-medium text-muted-foreground">Enter this code on the EdgeBox</span>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 text-center text-3xl font-mono font-bold tracking-[0.3em] text-foreground bg-background rounded-md border border-border/70 py-3">
+                      {issuedToken.token}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-full px-3"
+                      onClick={() => {
+                        navigator.clipboard.writeText(issuedToken.token);
+                        setCopiedToken(true);
+                        setTimeout(() => setCopiedToken(false), 2000);
+                      }}
+                    >
+                      {copiedToken ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+
+                <DialogFooter className="mt-2">
+                  <Button type="button" variant="outline" onClick={() => setIssuedToken(null)}>
+                    Generate Another
+                  </Button>
+                  <Button type="button" onClick={() => onOpenChange(false)}>
+                    Done
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-3.5 py-1">
@@ -385,15 +520,85 @@ echo "Device registered and configured!"
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-foreground">
-                  CPU / SoC Serial (Optional)
+                  Bluetooth MAC <span className="text-destructive">*</span>
                 </label>
                 <Input
-                  placeholder="e.g. 02c00081d5930b56"
-                  value={socSerial}
-                  onChange={(e) => setSocSerial(e.target.value)}
+                  placeholder="00:1A:2B:3C:4D:5E"
+                  value={bleMac}
+                  onChange={(e) => setBleMac(e.target.value)}
+                  required
                   className="font-mono text-xs"
                 />
               </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-foreground">
+                CPU / SoC Serial (Optional)
+              </label>
+              <Input
+                placeholder="e.g. 02c00081d5930b56"
+                value={socSerial}
+                onChange={(e) => setSocSerial(e.target.value)}
+                className="font-mono text-xs"
+              />
+            </div>
+
+            {/* Advanced Hardware Info */}
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground self-start"
+              >
+                {showAdvanced ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                Advanced Hardware Info (Optional)
+              </button>
+
+              {showAdvanced && (
+                <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-medium text-foreground">WLAN MAC</label>
+                      <Input
+                        placeholder="00:1A:2B:3C:4D:5E"
+                        value={wlanMac}
+                        onChange={(e) => setWlanMac(e.target.value)}
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-medium text-foreground">SoC ID</label>
+                      <Input
+                        placeholder="e.g. QCS6490"
+                        value={socId}
+                        onChange={(e) => setSocId(e.target.value)}
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-medium text-foreground">Machine / Architecture</label>
+                      <Input
+                        placeholder="e.g. aarch64"
+                        value={machine}
+                        onChange={(e) => setMachine(e.target.value)}
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-medium text-foreground">Storage Serial</label>
+                      <Input
+                        placeholder="e.g. S4J2NX0M123456"
+                        value={storageSerial}
+                        onChange={(e) => setStorageSerial(e.target.value)}
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <DialogFooter className="mt-2">
