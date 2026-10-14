@@ -78,7 +78,7 @@ export async function createDeviceModelAction(data: {
 }): Promise<{ success: boolean; data?: DeviceModel; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/devices/models`, {
+    const res = await fetch(`${BACKEND_URL}/api/v1/devices/admin/models`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify(data),
@@ -109,7 +109,7 @@ export async function updateDeviceModelAction(
 ): Promise<{ success: boolean; data?: DeviceModel; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/devices/models/${encodeURIComponent(code)}`, {
+    const res = await fetch(`${BACKEND_URL}/api/v1/devices/admin/models/${encodeURIComponent(code)}`, {
       method: "PATCH",
       headers: reqHeaders,
       body: JSON.stringify(data),
@@ -174,7 +174,16 @@ export async function getDevicesAction(params?: {
       return { success: false, error: json?.message || "Failed to fetch devices" };
     }
 
-    return { success: true, data: json.data as DeviceListResult };
+    const rawItems = Array.isArray(json.data) ? json.data : (json.data?.items || []);
+    const pagination = json.data?.pagination || json.pagination || {
+      page: params?.page || 1,
+      limit: params?.limit || rawItems.length,
+      total: rawItems.length,
+      total_pages: 1,
+      has_next: false,
+      has_prev: false,
+    };
+    return { success: true, data: { items: rawItems, pagination } };
   } catch (err: any) {
     return { success: false, error: err?.message || "Network error fetching devices" };
   }
@@ -208,7 +217,7 @@ export async function factoryRegisterDeviceAction(
 ): Promise<{ success: boolean; data?: Device; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/devices/factory-register`, {
+    const res = await fetch(`${BACKEND_URL}/api/v1/devices/admin/factory-register`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify(payload),
@@ -236,7 +245,7 @@ export async function generateDeviceRegisterTokenAction(
 ): Promise<{ success: boolean; data?: DeviceRegisterToken; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/devices/device-register-tokens`, {
+    const res = await fetch(`${BACKEND_URL}/api/v1/devices/admin/device-register-tokens`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify({ device_model: deviceModel }),
@@ -266,7 +275,7 @@ export async function dispatchToVendorAction(data: {
 }): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/devices/dispatch-to-vendor`, {
+    const res = await fetch(`${BACKEND_URL}/api/v1/devices/admin/dispatch-to-vendor`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify(data),
@@ -314,7 +323,7 @@ export async function shipToCustomerAction(data: {
 }): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/devices/ship-to-customer`, {
+    const res = await fetch(`${BACKEND_URL}/api/v1/devices/admin/ship-to-customer`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify(data),
@@ -392,7 +401,7 @@ export async function decommissionDeviceAction(
   try {
     const reqHeaders = await getAdminHeaders();
     const res = await fetch(
-      `${BACKEND_URL}/api/v1/devices/${encodeURIComponent(deviceId)}/decommission`,
+      `${BACKEND_URL}/api/v1/devices/admin/${encodeURIComponent(deviceId)}/decommission`,
       {
         method: "POST",
         headers: reqHeaders,
@@ -419,7 +428,7 @@ export async function moveToMaintenanceAction(
   try {
     const reqHeaders = await getAdminHeaders();
     const res = await fetch(
-      `${BACKEND_URL}/api/v1/devices/${encodeURIComponent(deviceId)}/maintenance`,
+      `${BACKEND_URL}/api/v1/devices/admin/${encodeURIComponent(deviceId)}/maintenance`,
       {
         method: "POST",
         headers: reqHeaders,
@@ -446,7 +455,7 @@ export async function returnToStockAction(
   try {
     const reqHeaders = await getAdminHeaders();
     const res = await fetch(
-      `${BACKEND_URL}/api/v1/devices/${encodeURIComponent(deviceId)}/return-to-stock`,
+      `${BACKEND_URL}/api/v1/devices/admin/${encodeURIComponent(deviceId)}/return-to-stock`,
       {
         method: "POST",
         headers: reqHeaders,
@@ -472,7 +481,7 @@ export async function deleteDeviceAction(
   try {
     const reqHeaders = await getAdminHeaders();
     const res = await fetch(
-      `${BACKEND_URL}/api/v1/devices/${encodeURIComponent(deviceId)}`,
+      `${BACKEND_URL}/api/v1/devices/admin/${encodeURIComponent(deviceId)}`,
       {
         method: "DELETE",
         headers: reqHeaders,
@@ -513,7 +522,8 @@ export async function getVendorsListAction(
       return { success: false, error: json?.message || "Failed to fetch vendors" };
     }
 
-    const vendors = (json.data || [])
+    const rawList = Array.isArray(json.data) ? json.data : (json.data?.items || []);
+    const vendors = rawList
       .filter((v: any) => v.verificationStatus === "VERIFIED")
       .map((v: any) => ({
         id: v.businessAccountId || v.id,

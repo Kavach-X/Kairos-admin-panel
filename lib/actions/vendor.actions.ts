@@ -55,7 +55,8 @@ export async function getVendorsAction(
     if (!res.ok) {
       return { success: false, error: json?.message || "Failed to fetch vendors" };
     }
-    return { success: true, data: json.data as VendorItem[] };
+    const items = Array.isArray(json.data) ? json.data : (json.data?.items || []);
+    return { success: true, data: items as VendorItem[] };
   } catch (err: any) {
     return { success: false, error: err?.message || "Network error fetching vendors" };
   }

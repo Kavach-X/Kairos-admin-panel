@@ -54,7 +54,8 @@ export async function getUsersAction(): Promise<{
     if (!res.ok) {
       return { success: false, error: json?.message || "Failed to fetch users" };
     }
-    return { success: true, data: json.data as AdminUserItem[] };
+    const items = Array.isArray(json.data) ? json.data : (json.data?.items || []);
+    return { success: true, data: items as AdminUserItem[] };
   } catch (err: any) {
     return { success: false, error: err?.message || "Network error fetching users" };
   }

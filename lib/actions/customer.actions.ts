@@ -58,7 +58,8 @@ export async function getCustomersAction(
     if (!res.ok) {
       return { success: false, error: json?.message || "Failed to fetch customers" };
     }
-    return { success: true, data: json.data as CustomerItem[] };
+    const items = Array.isArray(json.data) ? json.data : (json.data?.items || []);
+    return { success: true, data: items as CustomerItem[] };
   } catch (err: any) {
     return { success: false, error: err?.message || "Network error fetching customers" };
   }
