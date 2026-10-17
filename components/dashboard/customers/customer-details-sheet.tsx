@@ -35,8 +35,10 @@ interface CustomerDetailsSheetProps {
   onOpenChange: (open: boolean) => void;
   customer: CustomerItem | null;
   vendors: Array<{ id: string; name: string; vendorCode?: string }>;
-  onStatusChange?: (customerId: string, status: "ACTIVE" | "SUSPENDED") => void;
-  onReassignVendor?: (customerId: string, vendorAccountId: string) => void;
+  onStatusChange?: (customerId: string, status: "ACTIVE" | "SUSPENDED") => void | Promise<void>;
+  onReassignVendor?: (customerId: string, vendorAccountId: string) => void | Promise<void>;
+  isReassigningVendor?: boolean;
+  isUpdatingStatus?: boolean;
 }
 
 export function CustomerDetailsSheet({
@@ -46,6 +48,8 @@ export function CustomerDetailsSheet({
   vendors,
   onStatusChange,
   onReassignVendor,
+  isReassigningVendor = false,
+  isUpdatingStatus = false,
 }: CustomerDetailsSheetProps) {
   const [isReassigning, setIsReassigning] = React.useState(false);
   const [selectedVendorId, setSelectedVendorId] = React.useState("");
@@ -221,19 +225,23 @@ export function CustomerDetailsSheet({
                   <div className="flex gap-2 mt-1">
                     <Button
                       size="sm"
-                      className="h-7 text-xs flex-1"
-                      disabled={!selectedVendorId}
-                      onClick={() => {
-                        onReassignVendor?.(customer.id, selectedVendorId);
+                      className="h-7 text-xs flex-1 gap-1.5"
+                      disabled={!selectedVendorId || isReassigningVendor}
+                      onClick={async () => {
+                        await onReassignVendor?.(customer.id, selectedVendorId);
                         setIsReassigning(false);
                       }}
                     >
-                      Save Reassignment
+                      {isReassigningVendor && (
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                      )}
+                      {isReassigningVendor ? "Saving..." : "Save Reassignment"}
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       className="h-7 text-xs"
+                      disabled={isReassigningVendor}
                       onClick={() => setIsReassigning(false)}
                     >
                       Cancel
@@ -260,6 +268,7 @@ export function CustomerDetailsSheet({
                 variant="destructive"
                 size="sm"
                 className="gap-2 w-full"
+                disabled={isUpdatingStatus}
                 onClick={() => setConfirmSuspend(true)}
               >
                 <AlertTriangle className="h-3.5 w-3.5" />
@@ -270,11 +279,16 @@ export function CustomerDetailsSheet({
                 variant="default"
                 size="sm"
                 className="gap-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                disabled={isUpdatingStatus}
                 onClick={() => {
                   onStatusChange?.(customer.id, "ACTIVE");
                 }}
               >
-                <CheckCircle2 className="h-3.5 w-3.5" />
+                {isUpdatingStatus ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                )}
                 Reactivate Customer Account
               </Button>
             )}
@@ -296,8 +310,9 @@ export function CustomerDetailsSheet({
       }
       confirmText="Suspend Account"
       variant="destructive"
-      onConfirm={() => {
-        onStatusChange?.(customer.id, "SUSPENDED");
+      loading={isUpdatingStatus}
+      onConfirm={async () => {
+        await onStatusChange?.(customer.id, "SUSPENDED");
         setConfirmSuspend(false);
       }}
     />

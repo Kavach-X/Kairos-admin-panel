@@ -6,51 +6,21 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ChevronRight, ArrowUpRight } from "lucide-react";
-import { getDevicesAction } from "@/lib/actions/device.actions";
-import { getTicketsAction } from "@/lib/actions/ticket.actions";
-import { getVendorsAction } from "@/lib/actions/vendor.actions";
+import { getDashboardStatsAction } from "@/lib/actions/dashboard.actions";
 import { FleetDeploymentChart } from "@/components/dashboard/fleet-deployment-dial";
 
 export async function DashboardSidebar() {
-  const [devicesRes, ticketsRes, vendorsRes] = await Promise.allSettled([
-    getDevicesAction({ limit: 250 }),
-    getTicketsAction(),
-    getVendorsAction(),
-  ]);
+  const statsRes = await getDashboardStatsAction();
+  const s = statsRes.success && statsRes.data ? statsRes.data : null;
 
-  const devices =
-    devicesRes.status === "fulfilled" && devicesRes.value.success
-      ? devicesRes.value.data?.items || []
-      : [];
-  const tickets =
-    ticketsRes.status === "fulfilled" && ticketsRes.value.success
-      ? ticketsRes.value.data || []
-      : [];
-  const vendors =
-    vendorsRes.status === "fulfilled" && vendorsRes.value.success
-      ? vendorsRes.value.data || []
-      : [];
+  const totalDevices = s?.devices.total ?? 0;
+  const deployedDevices = s?.devices.deployed ?? 0;
+  const inStockDevices = s?.devices.inStock ?? 0;
+  const withVendorDevices = s?.devices.withVendor ?? 0;
+  const maintenanceDevices = s?.devices.maintenance ?? 0;
 
-  const totalDevices = devices.length;
-  const deployedDevices = devices.filter(
-    (d) => d.inventory_status === "INSTALLED" || d.inventory_status === "ASSIGNED"
-  ).length;
-  const inStockDevices = devices.filter(
-    (d) => d.inventory_status === "IN_STOCK"
-  ).length;
-  const withVendorDevices = devices.filter(
-    (d) => d.inventory_status === "WITH_VENDOR"
-  ).length;
-  const maintenanceDevices = devices.filter(
-    (d) => d.inventory_status === "MAINTENANCE"
-  ).length;
-
-  const openTickets = tickets.filter(
-    (t) => t.status === "OPEN" || t.status === "IN_PROGRESS"
-  ).length;
-  const pendingVendors = vendors.filter(
-    (v) => v.verificationStatus === "PENDING"
-  ).length;
+  const openTickets = s?.tickets.open ?? 0;
+  const pendingVendors = s?.vendors.pending ?? 0;
 
   return (
     <Card className="border-border/50 bg-card shadow-none">

@@ -1,8 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { getDevicesAction } from "@/lib/actions/device.actions";
-import { getVendorsAction } from "@/lib/actions/vendor.actions";
-import { getCustomersAction } from "@/lib/actions/customer.actions";
-import { getEventsAction } from "@/lib/actions/event.actions";
+import { getDashboardStatsAction } from "@/lib/actions/dashboard.actions";
 
 interface StatItem {
   title: string;
@@ -14,67 +11,23 @@ interface StatItem {
 }
 
 export async function StatsGrid() {
-  const past24hIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const [devicesRes, vendorsRes, customersRes, eventsRes, events24hRes] =
-    await Promise.allSettled([
-      getDevicesAction({ limit: 250 }),
-      getVendorsAction(),
-      getCustomersAction(),
-      getEventsAction({ limit: 100 }),
-      getEventsAction({ startDate: past24hIso, limit: 1 }),
-    ]);
+  const statsRes = await getDashboardStatsAction();
+  const s = statsRes.success && statsRes.data ? statsRes.data : null;
 
-  const devices =
-    devicesRes.status === "fulfilled" && devicesRes.value.success
-      ? devicesRes.value.data?.items || []
-      : [];
-  const vendors =
-    vendorsRes.status === "fulfilled" && vendorsRes.value.success
-      ? vendorsRes.value.data || []
-      : [];
-  const customers =
-    customersRes.status === "fulfilled" && customersRes.value.success
-      ? customersRes.value.data || []
-      : [];
-  const events =
-    eventsRes.status === "fulfilled" && eventsRes.value.success
-      ? eventsRes.value.data?.items || []
-      : [];
+  const totalDevices = s?.devices.total ?? 0;
+  const deployedDevices = s?.devices.deployed ?? 0;
+  const inStockDevices = s?.devices.inStock ?? 0;
 
-  const totalDevices = devices.length;
-  const deployedDevices = devices.filter(
-    (d) => d.inventory_status === "INSTALLED" || d.inventory_status === "ASSIGNED"
-  ).length;
-  const inStockDevices = devices.filter(
-    (d) => d.inventory_status === "IN_STOCK"
-  ).length;
+  const totalCustomers = s?.customers.total ?? 0;
+  const totalCameras = s?.cameras.total ?? 0;
 
-  const totalCustomers = customers.length;
-  const totalCameras = customers.reduce(
-    (acc, c) => acc + (c.totalCameras || 0),
-    0
-  );
+  const totalEventsAll = s?.events.total ?? 0;
+  const events24hCount = s?.events.last24h ?? 0;
+  const importantAlerts = s?.events.importantAlerts24h ?? 0;
 
-  const totalEventsAll =
-    eventsRes.status === "fulfilled" && eventsRes.value.success
-      ? (eventsRes.value.data?.total ?? events.length)
-      : 0;
-
-  const events24hCount =
-    events24hRes.status === "fulfilled" && events24hRes.value.success
-      ? (events24hRes.value.data?.total ?? 0)
-      : 0;
-
-  const importantAlerts = events.filter(
-    (e) => e.threatLevel === "CRITICAL" || e.threatLevel === "HIGH"
-  ).length;
-
-  const verifiedVendors = vendors.filter(
-    (v) => v.verificationStatus === "VERIFIED"
-  ).length;
-  const pendingVendors = vendors.filter(
-    (v) => v.verificationStatus === "PENDING"
-  ).length;
+  const totalVendors = s?.vendors.total ?? 0;
+  const verifiedVendors = s?.vendors.verified ?? 0;
+  const pendingVendors = s?.vendors.pending ?? 0;
 
   const stats: StatItem[] = [
     {
@@ -104,7 +57,7 @@ export async function StatsGrid() {
     },
     {
       title: "Partner Vendors",
-      value: String(vendors.length),
+      value: String(totalVendors),
       change: `${verifiedVendors} verified`,
       changeType: "positive",
       subtext: pendingVendors > 0 ? `${pendingVendors} pending review` : "all active",

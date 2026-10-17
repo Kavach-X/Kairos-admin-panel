@@ -1,5 +1,6 @@
 "use server";
 
+import { cache } from "react";
 import { headers, cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { verifyAdminAccess } from "@/lib/session";
@@ -36,7 +37,7 @@ async function getAdminHeaders(): Promise<Record<string, string>> {
   return reqHeaders;
 }
 
-export async function getVendorsAction(
+export const getVendorsAction = cache(async function getVendorsAction(
   status?: string,
   search?: string
 ): Promise<{ success: boolean; data?: VendorItem[]; error?: string }> {
@@ -60,7 +61,7 @@ export async function getVendorsAction(
   } catch (err: any) {
     return { success: false, error: err?.message || "Network error fetching vendors" };
   }
-}
+});
 
 export async function verifyVendorAction(
   businessAccountId: string,

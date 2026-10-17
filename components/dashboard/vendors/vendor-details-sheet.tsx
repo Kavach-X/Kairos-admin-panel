@@ -33,7 +33,8 @@ interface VendorDetailsSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   vendor: VendorItem | null;
-  onVerify?: (vendorId: string, status: VerificationStatus) => void;
+  onVerify?: (vendorId: string, status: VerificationStatus) => void | Promise<void>;
+  isVerifying?: boolean;
 }
 
 const statusBadgeStyles: Record<string, { label: string; className: string }> = {
@@ -56,6 +57,7 @@ export function VendorDetailsSheet({
   onOpenChange,
   vendor,
   onVerify,
+  isVerifying = false,
 }: VendorDetailsSheetProps) {
   const [confirmVerify, setConfirmVerify] = React.useState<VerificationStatus | null>(null);
 
@@ -225,6 +227,7 @@ export function VendorDetailsSheet({
                 variant="default"
                 size="sm"
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                disabled={isVerifying}
                 onClick={() => setConfirmVerify("VERIFIED")}
               >
                 <CheckCircle2 className="h-3.5 w-3.5" />
@@ -234,6 +237,7 @@ export function VendorDetailsSheet({
                 variant="destructive"
                 size="sm"
                 className="flex-1 gap-1.5"
+                disabled={isVerifying}
                 onClick={() => setConfirmVerify("REJECTED")}
               >
                 <XCircle className="h-3.5 w-3.5" />
@@ -276,9 +280,10 @@ export function VendorDetailsSheet({
       }
       confirmText={confirmVerify === "VERIFIED" ? "Approve KYC" : "Reject KYC"}
       variant={confirmVerify === "VERIFIED" ? "default" : "destructive"}
-      onConfirm={() => {
+      loading={isVerifying}
+      onConfirm={async () => {
         if (confirmVerify) {
-          onVerify?.(vendor.businessAccountId, confirmVerify);
+          await onVerify?.(vendor.businessAccountId, confirmVerify);
           setConfirmVerify(null);
           onOpenChange(false);
         }

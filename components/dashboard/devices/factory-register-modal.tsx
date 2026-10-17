@@ -35,6 +35,7 @@ interface FactoryRegisterModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   models: DeviceModel[];
+  modelsLoading?: boolean;
   onSuccess?: () => void;
 }
 
@@ -59,6 +60,7 @@ export function FactoryRegisterModal({
   open,
   onOpenChange,
   models,
+  modelsLoading = false,
   onSuccess,
 }: FactoryRegisterModalProps) {
   const [mode, setMode] = React.useState<"token" | "manual">("token");
@@ -334,22 +336,30 @@ KAIROS_MODEL_CODE="${modelCode}"
                   <label className="text-xs font-medium text-foreground">
                     Device Model <span className="text-destructive">*</span>
                   </label>
-                  <select
-                    value={tokenModelCode}
-                    onChange={(e) => setTokenModelCode(e.target.value)}
-                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    required
-                  >
-                    {models.length === 0 ? (
-                      <option value="">No models available</option>
-                    ) : (
-                      models.map((m) => (
-                        <option key={m.code} value={m.code}>
-                          {m.name}
-                        </option>
-                      ))
+                  <div className="relative">
+                    <select
+                      value={tokenModelCode}
+                      onChange={(e) => setTokenModelCode(e.target.value)}
+                      disabled={modelsLoading}
+                      className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+                      required
+                    >
+                      {modelsLoading ? (
+                        <option value="">Loading models...</option>
+                      ) : models.length === 0 ? (
+                        <option value="">No models available</option>
+                      ) : (
+                        models.map((m) => (
+                          <option key={m.code} value={m.code}>
+                            {m.name}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                    {modelsLoading && (
+                      <RefreshCw className="absolute right-8 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-muted-foreground pointer-events-none" />
                     )}
-                  </select>
+                  </div>
                 </div>
 
                 <DialogFooter className="mt-2">
@@ -444,22 +454,30 @@ KAIROS_MODEL_CODE="${modelCode}"
                 <label className="text-xs font-medium text-foreground">
                   Device Model <span className="text-destructive">*</span>
                 </label>
-                <select
-                  value={modelCode}
-                  onChange={(e) => setModelCode(e.target.value)}
-                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  required
-                >
-                  {models.length === 0 ? (
-                    <option value="">No models available</option>
-                  ) : (
-                    models.map((m) => (
-                      <option key={m.code} value={m.code}>
-                        {m.name}
-                      </option>
-                    ))
+                <div className="relative">
+                  <select
+                    value={modelCode}
+                    onChange={(e) => setModelCode(e.target.value)}
+                    disabled={modelsLoading}
+                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+                    required
+                  >
+                    {modelsLoading ? (
+                      <option value="">Loading models...</option>
+                    ) : models.length === 0 ? (
+                      <option value="">No models available</option>
+                    ) : (
+                      models.map((m) => (
+                        <option key={m.code} value={m.code}>
+                          {m.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  {modelsLoading && (
+                    <RefreshCw className="absolute right-8 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-muted-foreground pointer-events-none" />
                   )}
-                </select>
+                </div>
               </div>
             </div>
 

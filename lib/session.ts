@@ -1,5 +1,6 @@
 "use server";
 
+import { cache } from "react";
 import { headers, cookies } from "next/headers";
 import type { User, Session } from "@/lib/types";
 
@@ -72,8 +73,11 @@ async function buildAuthHeaders(): Promise<Record<string, string> | null> {
 
 /**
  * Forwards session credentials to backend to fetch the Better Auth session.
+ * Wrapped in React's `cache()` so repeated calls within the same request
+ * (e.g. from several dashboard Server Components rendering in parallel)
+ * reuse one result instead of firing a separate network round trip each.
  */
-export async function getServerSession(): Promise<{
+export const getServerSession = cache(async function getServerSession(): Promise<{
   user: User;
   session: Session;
 } | null> {
@@ -96,13 +100,16 @@ export async function getServerSession(): Promise<{
   } catch {
     return null;
   }
-}
+});
 
 /**
  * Calls backend unified portal/me endpoint with `portal=ADMIN` intent
  * to verify if the current session has SUPER_ADMIN permissions.
+ * Wrapped in React's `cache()` for the same reason as `getServerSession` —
+ * every data-fetching Server Action calls this before doing its own work,
+ * so without caching a single page render could fire it a dozen times.
  */
-export async function verifyAdminAccess(): Promise<AdminPortalContext | null> {
+export const verifyAdminAccess = cache(async function verifyAdminAccess(): Promise<AdminPortalContext | null> {
   const reqHeaders = await buildAuthHeaders();
   if (!reqHeaders) return null;
 
@@ -132,4 +139,4 @@ export async function verifyAdminAccess(): Promise<AdminPortalContext | null> {
   } catch {
     return null;
   }
-}
+});

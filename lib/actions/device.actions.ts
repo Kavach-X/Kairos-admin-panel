@@ -1,5 +1,6 @@
 "use server";
 
+import { cache } from "react";
 import { headers, cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { verifyAdminAccess } from "@/lib/session";
@@ -130,7 +131,7 @@ export async function updateDeviceModelAction(
 
 // ─── 2. Devices Fleet & Inventory ───────────────────────────────────
 
-export async function getDevicesAction(params?: {
+export const getDevicesAction = cache(async function getDevicesAction(params?: {
   page?: number;
   limit?: number;
   inventory_status?: string;
@@ -187,7 +188,7 @@ export async function getDevicesAction(params?: {
   } catch (err: any) {
     return { success: false, error: err?.message || "Network error fetching devices" };
   }
-}
+});
 
 export async function getDeviceByIdAction(
   deviceId: string
