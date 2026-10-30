@@ -1,6 +1,7 @@
-import { redirect } from "next/navigation";
-import { verifyAdminAccess, type AdminPortalContext } from "@/lib/session";
+import { Suspense } from "react";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { AdminGate } from "@/components/dashboard/admin-gate";
+import { SidebarUser, SidebarUserSkeleton } from "@/components/dashboard/sidebar-user";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 export const metadata = {
@@ -8,21 +9,25 @@ export const metadata = {
   description: "Kairos Edge Platform administration dashboard",
 };
 
-export default async function DashboardLayout({
+export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Server-side admin verification on every dashboard request
-  const adminContext = await verifyAdminAccess();
-
-  if (!adminContext) {
-    redirect("/login?error=unauthorized");
-  }
-
+  // No top-level await: the shell prerenders statically and the session-dependent
+  // parts (admin gate, user menu) stream in behind their own boundaries.
   return (
     <TooltipProvider>
-      <DashboardShell adminContext={adminContext}>
+      <DashboardShell
+        footer={
+          <Suspense fallback={<SidebarUserSkeleton />}>
+            <SidebarUser />
+          </Suspense>
+        }
+      >
+        <Suspense fallback={null}>
+          <AdminGate />
+        </Suspense>
         {children}
       </DashboardShell>
     </TooltipProvider>

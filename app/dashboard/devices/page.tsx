@@ -1,11 +1,22 @@
-import {
-  getDevicesAction,
-  getDeviceModelsAction,
-  getVendorsListAction,
-} from "@/lib/actions/device.actions";
+import { Suspense } from "react";
+import { ListPageSkeleton } from "@/components/dashboard/page-skeletons";
+import { getDevicesAction } from "@/lib/actions/device.actions";
+import { getDeviceModels, getVendorsList } from "@/lib/data/reference-data";
 import { DevicesPageClient } from "@/components/dashboard/devices/devices-page-client";
 
-export default async function DevicesPage({
+export default function DevicesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ selected?: string }>;
+}) {
+  return (
+    <Suspense fallback={<ListPageSkeleton />}>
+      <DevicesData searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function DevicesData({
   searchParams,
 }: {
   searchParams: Promise<{ selected?: string }>;
@@ -14,8 +25,8 @@ export default async function DevicesPage({
 
   const [devRes, modelRes, vendorRes] = await Promise.all([
     getDevicesAction({ limit: 250 }),
-    getDeviceModelsAction(),
-    getVendorsListAction(),
+    getDeviceModels(),
+    getVendorsList(),
   ]);
 
   const devices = devRes.success && devRes.data ? devRes.data.items : [];

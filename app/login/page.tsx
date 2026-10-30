@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { verifyAdminAccess } from "@/lib/session";
 import { LoginForm } from "./login-form";
@@ -7,19 +8,11 @@ export const metadata = {
   description: "Sign in to the Kairos Edge Platform administration panel",
 };
 
-export default async function LoginPage({
+export default function LoginPage({
   searchParams,
 }: {
   searchParams?: Promise<{ error?: string }>;
 }) {
-  const adminContext = await verifyAdminAccess();
-  console.log("adminContext", adminContext);
-  if (adminContext) {
-    redirect("/dashboard");
-  }
-
-  const resolvedParams = searchParams ? await searchParams : {};
-
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-background p-4 sm:p-8">
       {/* Subtle background gradient for depth */}
@@ -42,7 +35,9 @@ export default async function LoginPage({
         </div>
 
         {/* Login Form */}
-        <LoginForm initialError={resolvedParams.error} />
+        <Suspense fallback={<LoginForm />}>
+          <LoginFormWithState searchParams={searchParams} />
+        </Suspense>
 
         {/* Footer */}
         <div className="mt-6 flex flex-col items-center gap-1 text-center">
@@ -56,4 +51,17 @@ export default async function LoginPage({
       </div>
     </main>
   );
+}
+
+/** Reads the session and URL, so it streams in behind <Suspense>; the page chrome stays static. */
+async function LoginFormWithState({
+  searchParams,
+}: {
+  searchParams?: Promise<{ error?: string }>;
+}) {
+  const adminContext = await verifyAdminAccess();
+  if (adminContext) redirect("/dashboard");
+
+  const resolvedParams = searchParams ? await searchParams : {};
+  return <LoginForm initialError={resolvedParams.error} />;
 }

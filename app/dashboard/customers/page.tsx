@@ -1,11 +1,21 @@
+import { Suspense } from "react";
+import { ListPageSkeleton } from "@/components/dashboard/page-skeletons";
 import { getCustomersAction } from "@/lib/actions/customer.actions";
-import { getVendorsListAction } from "@/lib/actions/device.actions";
+import { getVendorsList } from "@/lib/data/reference-data";
 import { CustomersPageClient } from "@/components/dashboard/customers/customers-page-client";
 
-export default async function CustomersPage() {
+export default function CustomersPage() {
+  return (
+    <Suspense fallback={<ListPageSkeleton />}>
+      <CustomersData />
+    </Suspense>
+  );
+}
+
+async function CustomersData() {
   const [custRes, vendorRes] = await Promise.all([
     getCustomersAction(),
-    getVendorsListAction(),
+    getVendorsList(),
   ]);
 
   const customers = custRes.success && custRes.data ? custRes.data : [];

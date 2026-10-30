@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { DetailPageSkeleton } from "@/components/dashboard/page-skeletons";
 import { redirect } from "next/navigation";
 import { verifyAdminAccess } from "@/lib/session";
 import { getMeAction } from "@/lib/actions/user.actions";
@@ -8,7 +10,15 @@ export const metadata = {
   description: "Manage your personal credentials, contact channels, and console security",
 };
 
-export default async function AccountPage() {
+export default function AccountPage() {
+  return (
+    <Suspense fallback={<DetailPageSkeleton />}>
+      <AccountData />
+    </Suspense>
+  );
+}
+
+async function AccountData() {
   const adminContext = await verifyAdminAccess();
   if (!adminContext) {
     redirect("/login?error=unauthorized");

@@ -2,7 +2,7 @@
 
 import { cache } from "react";
 import { headers, cookies } from "next/headers";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { verifyAdminAccess } from "@/lib/session";
 import type { VendorItem, VerificationStatus } from "@/lib/types";
 
@@ -84,6 +84,7 @@ export async function verifyVendorAction(
     }
 
     revalidatePath("/dashboard/vendors");
+    updateTag("vendors-list");
     return { success: true, data: json.data };
   } catch (err: any) {
     return { success: false, error: err?.message || "Network error updating vendor" };
