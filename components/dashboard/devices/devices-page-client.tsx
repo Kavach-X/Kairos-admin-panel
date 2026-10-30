@@ -39,11 +39,22 @@ import {
   moveToMaintenanceAction,
   returnToStockAction,
 } from "@/lib/actions/device.actions";
-import { FactoryRegisterModal } from "@/components/dashboard/devices/factory-register-modal";
-import { DispatchVendorModal } from "@/components/dashboard/devices/dispatch-vendor-modal";
-import { ShipCustomerModal } from "@/components/dashboard/devices/ship-customer-modal";
-import { DeviceDetailsSheet } from "@/components/dashboard/devices/device-details-sheet";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
+import dynamic from "next/dynamic";
+
+// Dialogs and the details sheet are only needed after a click; load them off the critical path.
+const FactoryRegisterModal = dynamic(() =>
+  import("@/components/dashboard/devices/factory-register-modal").then((m) => m.FactoryRegisterModal)
+);
+const DispatchVendorModal = dynamic(() =>
+  import("@/components/dashboard/devices/dispatch-vendor-modal").then((m) => m.DispatchVendorModal)
+);
+const ShipCustomerModal = dynamic(() =>
+  import("@/components/dashboard/devices/ship-customer-modal").then((m) => m.ShipCustomerModal)
+);
+const DeviceDetailsSheet = dynamic(() =>
+  import("@/components/dashboard/devices/device-details-sheet").then((m) => m.DeviceDetailsSheet)
+);
 import { toast } from "sonner";
 
 const STATUS_TABS: Array<{ label: string; value: string }> = [

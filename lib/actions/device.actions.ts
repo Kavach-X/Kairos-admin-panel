@@ -2,7 +2,7 @@
 
 import { cache } from "react";
 import { headers, cookies } from "next/headers";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { verifyAdminAccess } from "@/lib/session";
 import type {
   Device,
@@ -10,6 +10,9 @@ import type {
   DeviceListResult,
   FactoryRegisterPayload,
   DeviceRegisterToken,
+  DeviceTelemetryHistory,
+  DeviceLiveVitals,
+  TelemetryRange,
 } from "@/lib/types";
 
 const BACKEND_URL =
@@ -91,6 +94,7 @@ export async function createDeviceModelAction(data: {
     }
 
     revalidatePath("/dashboard/devices/models");
+    updateTag("device-models");
     revalidatePath("/dashboard/devices");
     return { success: true, data: json.data as DeviceModel };
   } catch (err: any) {
@@ -122,6 +126,7 @@ export async function updateDeviceModelAction(
     }
 
     revalidatePath("/dashboard/devices/models");
+    updateTag("device-models");
     revalidatePath("/dashboard/devices");
     return { success: true, data: json.data as DeviceModel };
   } catch (err: any) {
@@ -208,6 +213,47 @@ export async function getDeviceByIdAction(
     return { success: true, data: json.data as Device };
   } catch (err: any) {
     return { success: false, error: err?.message || "Network error fetching device" };
+  }
+}
+
+export async function getDeviceTelemetryHistoryAction(
+  deviceId: string,
+  range: TelemetryRange = "24h"
+): Promise<{ success: boolean; data?: DeviceTelemetryHistory; error?: string }> {
+  try {
+    const reqHeaders = await getAdminHeaders();
+    const res = await fetch(
+      `${BACKEND_URL}/api/v1/devices/${encodeURIComponent(deviceId)}/metrics?range=${range}`,
+      { headers: reqHeaders, cache: "no-store" }
+    );
+
+    const json = await res.json();
+    if (!res.ok) {
+      return { success: false, error: json?.message || "Failed to fetch telemetry history" };
+    }
+    return { success: true, data: json.data as DeviceTelemetryHistory };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Network error fetching telemetry history" };
+  }
+}
+
+export async function getDeviceLiveVitalsAction(
+  deviceId: string
+): Promise<{ success: boolean; data?: DeviceLiveVitals; error?: string }> {
+  try {
+    const reqHeaders = await getAdminHeaders();
+    const res = await fetch(
+      `${BACKEND_URL}/api/v1/devices/${encodeURIComponent(deviceId)}/live`,
+      { headers: reqHeaders, cache: "no-store" }
+    );
+
+    const json = await res.json();
+    if (!res.ok) {
+      return { success: false, error: json?.message || "Failed to fetch live vitals" };
+    }
+    return { success: true, data: json.data as DeviceLiveVitals };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Network error fetching live vitals" };
   }
 }
 

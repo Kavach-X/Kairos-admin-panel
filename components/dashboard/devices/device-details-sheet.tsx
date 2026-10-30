@@ -12,20 +12,18 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Cpu,
+  Activity,
   Building2,
   Trash2,
   ShieldCheck,
-  HardDrive,
   PowerOff,
   Wrench,
   CheckCircle2,
-  Video,
-  VideoOff,
   ExternalLink,
   Cloud,
 } from "lucide-react";
 import type { Device } from "@/lib/types";
+import { statusBadgeStyles } from "./device-status";
 import { getDeviceByIdAction } from "@/lib/actions/device.actions";
 
 interface DeviceDetailsSheetProps {
@@ -37,37 +35,6 @@ interface DeviceDetailsSheetProps {
   onMoveToMaintenance?: (deviceId: string) => void;
   onReturnToStock?: (deviceId: string) => void;
 }
-
-const statusBadgeStyles: Record<string, { label: string; className: string }> = {
-  IN_STOCK: {
-    label: "In Stock",
-    className: "bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/20",
-  },
-  WITH_VENDOR: {
-    label: "With Vendor",
-    className: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20",
-  },
-  ASSIGNED: {
-    label: "Assigned",
-    className: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
-  },
-  INSTALLED: {
-    label: "Installed",
-    className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
-  },
-  MAINTENANCE: {
-    label: "Maintenance",
-    className: "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20",
-  },
-  RETURNED: {
-    label: "Returned",
-    className: "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20",
-  },
-  DECOMMISSIONED: {
-    label: "Decommissioned",
-    className: "bg-zinc-500/10 text-zinc-500 border-zinc-500/20",
-  },
-};
 
 export function DeviceDetailsSheet({
   open,
@@ -166,50 +133,6 @@ export function DeviceDetailsSheet({
         </SheetHeader>
 
         <div className="flex flex-col gap-5 p-6 text-xs">
-          {/* Hardware Info */}
-          <div className="flex flex-col gap-2">
-            <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-              <Cpu className="h-3.5 w-3.5 text-primary" />
-              Hardware Info
-            </span>
-            <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-card p-3 font-mono text-[11px]">
-              <div>
-                <span className="text-[10px] text-muted-foreground block font-sans">Ethernet MAC</span>
-                <span className="text-foreground">{currentDevice.eth_mac}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-muted-foreground block font-sans">WLAN MAC</span>
-                <span className="text-foreground">{currentDevice.wlan_mac || "None"}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-muted-foreground block font-sans">Bluetooth MAC</span>
-                <span className="text-foreground">{currentDevice.ble_mac || "None"}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-muted-foreground block font-sans">CPU Serial</span>
-                <span className="text-foreground truncate block" title={currentDevice.soc_serial || "N/A"}>
-                  {currentDevice.soc_serial || "N/A"}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-muted-foreground block font-sans">SoC ID</span>
-                <span className="text-foreground truncate block" title={currentDevice.soc_id || "N/A"}>
-                  {currentDevice.soc_id || "N/A"}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-muted-foreground block font-sans">Storage Serial</span>
-                <span className="text-foreground truncate block" title={currentDevice.storage_serial || "N/A"}>
-                  {currentDevice.storage_serial || "N/A"}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-muted-foreground block font-sans">Machine</span>
-                <span className="text-foreground">{currentDevice.machine || "ARM64"}</span>
-              </div>
-            </div>
-          </div>
-
           {/* Location & Customer */}
           <div className="flex flex-col gap-2">
             <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
@@ -267,100 +190,6 @@ export function DeviceDetailsSheet({
             </div>
           </div>
 
-          {/* Connected CCTV Cameras & RTSP Channels */}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                <Video className="h-3.5 w-3.5 text-primary" />
-                CCTV Cameras & Channels ({cameras.length})
-              </span>
-            </div>
-
-            {cameras.length > 0 ? (
-              <div className="flex flex-col gap-2.5">
-                {cameras.map((cam) => {
-                  const isOnline = cam.status === "ACTIVE";
-                  return (
-                    <div
-                      key={cam.id}
-                      className="rounded-lg border border-border bg-card p-3 flex flex-col gap-2"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            variant="outline"
-                            className="font-mono text-[10px] font-bold px-1.5 py-0 border-primary/30 text-primary"
-                          >
-                            CH {cam.channelNumber}
-                          </Badge>
-                          <span className="font-semibold text-foreground text-xs">
-                            {cam.name}
-                          </span>
-                        </div>
-                        <Badge
-                          variant="outline"
-                          className={
-                            isOnline
-                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-[10px]"
-                              : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 text-[10px]"
-                          }
-                        >
-                          <span
-                            className={`inline-block h-1.5 w-1.5 rounded-full mr-1.5 ${
-                              isOnline ? "bg-emerald-500 animate-pulse" : "bg-rose-500"
-                            }`}
-                          />
-                          {cam.status}
-                        </Badge>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 text-[11px] font-mono text-muted-foreground pt-1 border-t border-border/40">
-                        <div>
-                          <span className="text-[10px] block font-sans text-muted-foreground">IP & Port</span>
-                          <span className="text-foreground">{cam.ipAddress}:{cam.port}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] block font-sans text-muted-foreground">Profile</span>
-                          <span className="text-foreground">{cam.resolution || "1080p"} @ {cam.fpsLimit || 15}fps</span>
-                        </div>
-                      </div>
-
-                      {cam.rtspPath && (
-                        <div className="text-[10px] font-mono bg-muted/40 px-2 py-1 rounded truncate text-muted-foreground">
-                          <span className="text-foreground/70">Path:</span> {cam.rtspPath}
-                        </div>
-                      )}
-
-                      {cam.aiTasks && cam.aiTasks.length > 0 && (
-                        <div className="flex flex-wrap gap-1 pt-0.5">
-                          {cam.aiTasks.map((task) => (
-                            <Badge
-                              key={task}
-                              variant="secondary"
-                              className="text-[9px] font-mono px-1.5 py-0 uppercase"
-                            >
-                              {task}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="rounded-lg border border-dashed border-border bg-card/40 p-4 text-center flex flex-col items-center justify-center">
-                <VideoOff className="h-5 w-5 text-muted-foreground/40 mb-1" />
-                <span className="text-xs font-medium text-foreground">
-                  No Cameras Configured
-                </span>
-                <p className="text-[11px] text-muted-foreground max-w-[240px] mt-0.5">
-                  IP/RTSP camera channels attach when onboarded at customer store.
-                </p>
-              </div>
-            )}
-          </div>
-
           {/* Cloud Status */}
           <div className="flex flex-col gap-2">
             <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
@@ -404,23 +233,42 @@ export function DeviceDetailsSheet({
             </div>
           </div>
 
-          {/* Model Specs */}
-          {currentDevice.model?.specs && (
-            <div className="flex flex-col gap-2">
-              <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                <HardDrive className="h-3.5 w-3.5 text-primary" />
-                Model Specs
-              </span>
-              <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-card p-3">
-                {Object.entries(currentDevice.model.specs).map(([key, val]) => (
-                  <div key={key}>
-                    <span className="text-[10px] text-muted-foreground uppercase">{key}</span>
-                    <span className="text-foreground font-medium block">{String(val)}</span>
-                  </div>
-                ))}
+          {/* Health Summary — full telemetry lives on the device page */}
+          <div className="flex flex-col gap-2">
+            <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+              <Activity className="h-3.5 w-3.5 text-primary" />
+              Health
+            </span>
+            <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3">
+              <div className="flex justify-between items-center pb-2 border-b border-border/40">
+                <span className="text-muted-foreground">Status:</span>
+                <span className="font-medium text-foreground">
+                  {currentDevice.runtimeState?.operational_status ||
+                    currentDevice.operational_status ||
+                    (currentDevice.online ? "ONLINE" : "OFFLINE")}
+                </span>
               </div>
+              <div className="flex justify-between items-center pb-2 border-b border-border/40">
+                <span className="text-muted-foreground">Last Seen:</span>
+                <span className="text-foreground">
+                  {currentDevice.runtimeState?.last_seen_at
+                    ? new Date(currentDevice.runtimeState.last_seen_at).toLocaleString()
+                    : "Never"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Cameras:</span>
+                <span className="text-foreground">{cameras.length}</span>
+              </div>
+              <Link
+                href={`/dashboard/devices/${encodeURIComponent(currentDevice.device_id)}`}
+                className="mt-1 flex items-center justify-center gap-1.5 rounded-md border border-primary/30 py-1.5 font-medium text-primary hover:bg-primary/10"
+              >
+                View full details, telemetry & live data
+                <ExternalLink className="h-3 w-3" />
+              </Link>
             </div>
-          )}
+          </div>
 
           {/* Actions */}
           <div className="pt-4 border-t border-border/40 flex flex-col gap-2">

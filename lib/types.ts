@@ -126,6 +126,61 @@ export interface DeviceRuntimeState {
   last_alert_sent_at: string | null;
 }
 
+export type TelemetryRange = "24h" | "7d" | "30d";
+
+export interface DeviceTelemetryPoint {
+  timestamp: string;
+  avg_temp: number;
+  max_temp: number;
+  avg_cpu: number;
+  max_cpu: number;
+  avg_memory: number;
+  uptime_percent: number;
+}
+
+export interface DeviceTelemetryHistory {
+  device_id: string;
+  range: TelemetryRange;
+  count: number;
+  metrics: DeviceTelemetryPoint[];
+}
+
+export interface DeviceLiveCamera {
+  id: string;
+  channel: number;
+  name: string;
+  ipAddress: string;
+  configured_in_db: boolean;
+  status: string;
+  fps: number;
+  ai_fps: number;
+  mismatch: boolean;
+  mismatch_reason?: string;
+}
+
+export interface DeviceLiveVitals {
+  device_id: string;
+  online: boolean;
+  operational_status: DeviceOperationalStatus;
+  data_freshness: "REALTIME" | "STALE" | "OFFLINE";
+  source: "AWS_SHADOW" | "DATABASE_FALLBACK";
+  last_seen_at: string | null;
+  last_offline_at: string | null;
+  disconnect_reason: string | null;
+  vitals: {
+    uptime_seconds: number;
+    firmware_version: string;
+    ai_pipeline_healthy: boolean;
+    metrics: {
+      temperature_celsius?: number;
+      cpu_percent?: number;
+      memory_percent?: number;
+      disk_percent?: number;
+    } | null;
+  } | null;
+  cameras: DeviceLiveCamera[];
+}
+
 export interface Device {
   device_id: string;
   modelCode: string;
