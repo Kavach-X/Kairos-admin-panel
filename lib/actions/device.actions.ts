@@ -11,7 +11,8 @@ import type {
   FactoryRegisterPayload,
   DeviceRegisterToken,
   DeviceTelemetryHistory,
-  DeviceLiveVitals,
+  DeviceLiveResult,
+  DeviceLiveHistory,
   TelemetryRange,
 } from "@/lib/types";
 
@@ -237,22 +238,68 @@ export async function getDeviceTelemetryHistoryAction(
   }
 }
 
+export async function getDeviceLiveHistoryAction(
+  deviceId: string,
+  limit = 10
+): Promise<{ success: boolean; data?: DeviceLiveHistory; error?: string }> {
+  try {
+    const reqHeaders = await getAdminHeaders();
+    const res = await fetch(
+      `${BACKEND_URL}/api/v1/devices/${encodeURIComponent(deviceId)}/live-history?limit=${limit}`,
+      { headers: reqHeaders, cache: "no-store" }
+    );
+
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { success: false, error: json?.message || "Failed to fetch recent live checks" };
+    }
+    return { success: true, data: json.data as DeviceLiveHistory };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Network error fetching recent live checks" };
+  }
+}
+
+// The backend waits up to ~8.3s for the device to answer, so allow a bit more.
+const LIVE_CHECK_REQUEST_TIMEOUT_MS = 12_000;
+
 export async function getDeviceLiveVitalsAction(
   deviceId: string
-): Promise<{ success: boolean; data?: DeviceLiveVitals; error?: string }> {
+): Promise<{ success: boolean; data?: DeviceLiveResult; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
     const res = await fetch(
       `${BACKEND_URL}/api/v1/devices/${encodeURIComponent(deviceId)}/live`,
-      { headers: reqHeaders, cache: "no-store" }
+      {
+        headers: reqHeaders,
+        cache: "no-store",
+        signal: AbortSignal.timeout(LIVE_CHECK_REQUEST_TIMEOUT_MS),
+      }
     );
 
-    const json = await res.json();
+    const json = await res.json().catch(() => null);
     if (!res.ok) {
+      if (res.status === 429) {
+        return {
+          success: false,
+          error: "Too many live checks (limit is 10 per minute). Wait a moment and try again.",
+        };
+      }
+      if (res.status === 502) {
+        return {
+          success: false,
+          error: "Could not send the health check to the device (publish to AWS IoT failed). Try again shortly.",
+        };
+      }
       return { success: false, error: json?.message || "Failed to fetch live vitals" };
     }
-    return { success: true, data: json.data as DeviceLiveVitals };
+    return { success: true, data: json.data as DeviceLiveResult };
   } catch (err: any) {
+    if (err?.name === "TimeoutError" || err?.name === "AbortError") {
+      return {
+        success: false,
+        error: `Live check timed out after ${LIVE_CHECK_REQUEST_TIMEOUT_MS / 1000} seconds.`,
+      };
+    }
     return { success: false, error: err?.message || "Network error fetching live vitals" };
   }
 }

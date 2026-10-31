@@ -16,6 +16,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { getDeviceByIdAction } from "@/lib/actions/device.actions";
 import { DeviceTelemetryPanel } from "@/components/dashboard/devices/device-telemetry-panel";
+import { LastSeen } from "@/components/dashboard/devices/relative-time";
+import { SectionTitle } from "@/components/dashboard/devices/section";
 import { statusBadgeStyles } from "@/components/dashboard/devices/device-status";
 
 export default function DeviceDetailPage({
@@ -60,7 +62,7 @@ async function DeviceDetail({ params }: { params: Promise<{ deviceId: string }> 
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span
               className={`inline-block h-2 w-2 rounded-full ${
-                currentDevice.online ? "bg-emerald-500 animate-pulse" : "bg-zinc-400"
+                currentDevice.online ? "bg-emerald-500" : "bg-zinc-400"
               }`}
             />
             {currentDevice.online ? "Online" : "Offline"}
@@ -77,48 +79,50 @@ async function DeviceDetail({ params }: { params: Promise<{ deviceId: string }> 
         </p>
       </div>
 
-      <DeviceTelemetryPanel deviceId={currentDevice.device_id} />
+      <DeviceTelemetryPanel
+        deviceId={currentDevice.device_id}
+        online={Boolean(currentDevice.online)}
+        inventoryStatus={currentDevice.inventory_status}
+        lastSeenAt={currentDevice.runtimeState?.last_seen_at ?? null}
+      />
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-x-4 gap-y-6 border-t border-border/60 pt-6 lg:grid-cols-2">
           {/* Hardware Info */}
-          <div className="flex flex-col gap-2">
-            <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-              <Cpu className="h-3.5 w-3.5 text-primary" />
-              Hardware Info
-            </span>
-            <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-card p-3 font-mono text-[11px]">
+          <div className="flex flex-col gap-3">
+            <SectionTitle icon={Cpu}>Hardware Info</SectionTitle>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border border-border bg-card p-4 font-mono text-xs">
               <div>
-                <span className="text-[10px] text-muted-foreground block font-sans">Ethernet MAC</span>
+                <span className="text-[11px] text-muted-foreground block font-sans">Ethernet MAC</span>
                 <span className="text-foreground">{currentDevice.eth_mac}</span>
               </div>
               <div>
-                <span className="text-[10px] text-muted-foreground block font-sans">WLAN MAC</span>
+                <span className="text-[11px] text-muted-foreground block font-sans">WLAN MAC</span>
                 <span className="text-foreground">{currentDevice.wlan_mac || "None"}</span>
               </div>
               <div>
-                <span className="text-[10px] text-muted-foreground block font-sans">Bluetooth MAC</span>
+                <span className="text-[11px] text-muted-foreground block font-sans">Bluetooth MAC</span>
                 <span className="text-foreground">{currentDevice.ble_mac || "None"}</span>
               </div>
               <div>
-                <span className="text-[10px] text-muted-foreground block font-sans">CPU Serial</span>
+                <span className="text-[11px] text-muted-foreground block font-sans">CPU Serial</span>
                 <span className="text-foreground truncate block" title={currentDevice.soc_serial || "N/A"}>
                   {currentDevice.soc_serial || "N/A"}
                 </span>
               </div>
               <div>
-                <span className="text-[10px] text-muted-foreground block font-sans">SoC ID</span>
+                <span className="text-[11px] text-muted-foreground block font-sans">SoC ID</span>
                 <span className="text-foreground truncate block" title={currentDevice.soc_id || "N/A"}>
                   {currentDevice.soc_id || "N/A"}
                 </span>
               </div>
               <div>
-                <span className="text-[10px] text-muted-foreground block font-sans">Storage Serial</span>
+                <span className="text-[11px] text-muted-foreground block font-sans">Storage Serial</span>
                 <span className="text-foreground truncate block" title={currentDevice.storage_serial || "N/A"}>
                   {currentDevice.storage_serial || "N/A"}
                 </span>
               </div>
               <div>
-                <span className="text-[10px] text-muted-foreground block font-sans">Machine</span>
+                <span className="text-[11px] text-muted-foreground block font-sans">Machine</span>
                 <span className="text-foreground">{currentDevice.machine || "ARM64"}</span>
               </div>
             </div>
@@ -126,12 +130,9 @@ async function DeviceDetail({ params }: { params: Promise<{ deviceId: string }> 
 
 
           {/* Location & Customer */}
-          <div className="flex flex-col gap-2">
-            <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-              <Building2 className="h-3.5 w-3.5 text-primary" />
-              Location & Customer
-            </span>
-            <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3">
+          <div className="flex flex-col gap-3">
+            <SectionTitle icon={Building2}>Location & Customer</SectionTitle>
+            <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4">
               <div className="flex justify-between items-center pb-2 border-b border-border/40">
                 <span className="text-muted-foreground">Managed By:</span>
                 <span className="font-medium text-foreground">
@@ -184,12 +185,9 @@ async function DeviceDetail({ params }: { params: Promise<{ deviceId: string }> 
 
 
           {/* Connected CCTV Cameras & RTSP Channels */}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                <Video className="h-3.5 w-3.5 text-primary" />
-                CCTV Cameras & Channels ({cameras.length})
-              </span>
+              <SectionTitle icon={Video}>CCTV Cameras & Channels ({cameras.length})</SectionTitle>
             </div>
 
             {cameras.length > 0 ? (
@@ -199,7 +197,7 @@ async function DeviceDetail({ params }: { params: Promise<{ deviceId: string }> 
                   return (
                     <div
                       key={cam.id}
-                      className="rounded-lg border border-border bg-card p-3 flex flex-col gap-2"
+                      className="rounded-xl border border-border bg-card p-4 flex flex-col gap-2"
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -221,11 +219,6 @@ async function DeviceDetail({ params }: { params: Promise<{ deviceId: string }> 
                               : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 text-[10px]"
                           }
                         >
-                          <span
-                            className={`inline-block h-1.5 w-1.5 rounded-full mr-1.5 ${
-                              isOnline ? "bg-emerald-500 animate-pulse" : "bg-rose-500"
-                            }`}
-                          />
                           {cam.status}
                         </Badge>
                       </div>
@@ -265,7 +258,7 @@ async function DeviceDetail({ params }: { params: Promise<{ deviceId: string }> 
                 })}
               </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-border bg-card/40 p-4 text-center flex flex-col items-center justify-center">
+              <div className="rounded-xl border border-dashed border-border bg-card/40 p-6 text-center flex flex-col items-center justify-center">
                 <VideoOff className="h-5 w-5 text-muted-foreground/40 mb-1" />
                 <span className="text-xs font-medium text-foreground">
                   No Cameras Configured
@@ -279,18 +272,14 @@ async function DeviceDetail({ params }: { params: Promise<{ deviceId: string }> 
 
 
           {/* Cloud Status */}
-          <div className="flex flex-col gap-2">
-            <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-              <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-              Cloud Status
-            </span>
-            <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3">
+          <div className="flex flex-col gap-3">
+            <SectionTitle icon={ShieldCheck}>Cloud Status</SectionTitle>
+            <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4">
               <div className="flex justify-between items-center pb-2 border-b border-border/40">
-                <span className="text-muted-foreground">Cloud Sync:</span>
+                <span className="text-muted-foreground">Connection:</span>
                 {currentDevice.online ? (
                   <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    Connected & Synchronized
+                    Connected to the cloud
                   </span>
                 ) : (
                   <Badge variant="outline" className="bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/30 text-[10px] font-medium flex items-center gap-1">
@@ -302,9 +291,10 @@ async function DeviceDetail({ params }: { params: Promise<{ deviceId: string }> 
               <div className="flex justify-between items-center pb-2 border-b border-border/40">
                 <span className="text-muted-foreground">Last Seen:</span>
                 <span className="text-foreground">
-                  {currentDevice.runtimeState?.last_seen_at
-                    ? new Date(currentDevice.runtimeState.last_seen_at).toLocaleString()
-                    : "Never"}
+                  <LastSeen
+                    deviceId={currentDevice.device_id}
+                    iso={currentDevice.runtimeState?.last_seen_at ?? null}
+                  />
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -318,15 +308,12 @@ async function DeviceDetail({ params }: { params: Promise<{ deviceId: string }> 
 
           {/* Model Specs */}
           {currentDevice.model?.specs && (
-            <div className="flex flex-col gap-2">
-              <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                <HardDrive className="h-3.5 w-3.5 text-primary" />
-                Model Specs
-              </span>
-              <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-card p-3">
+            <div className="flex flex-col gap-3">
+              <SectionTitle icon={HardDrive}>Model Specs</SectionTitle>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border border-border bg-card p-4">
                 {Object.entries(currentDevice.model.specs).map(([key, val]) => (
                   <div key={key}>
-                    <span className="text-[10px] text-muted-foreground uppercase">{key}</span>
+                    <span className="text-[11px] text-muted-foreground uppercase">{key}</span>
                     <span className="text-foreground font-medium block">{String(val)}</span>
                   </div>
                 ))}

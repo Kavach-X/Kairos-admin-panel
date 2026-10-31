@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   description: "Kairos Edge Platform Administration & Telemetry Console",
 };
 
-import { Toaster } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
 
 
 export default function RootLayout({

@@ -135,7 +135,28 @@ export interface DeviceTelemetryPoint {
   avg_cpu: number;
   max_cpu: number;
   avg_memory: number;
-  uptime_percent: number;
+  uptime_percent: number | null;
+  // Optional device fields; null on rows that predate them or when the device didn't send them
+  disk_percent: number | null;
+  uptime_seconds: number | null;
+  network_type: string | null;
+  wifi_rssi_dbm: number | null;
+  pipeline_status: string | null;
+  firmware_version: string | null;
+  cameras_configured: number | null;
+  npu_temp_celsius: number | null;
+  npu_state: string | null;
+}
+
+/** One on-demand live check, as plotted on the charts (GET /metrics -> live_samples). */
+export interface DeviceLiveSample {
+  recorded_at: string;
+  temp: number | null;
+  cpu: number | null;
+  memory: number | null;
+  disk: number | null;
+  uptime_seconds: number | null;
+  pipeline_status: DevicePipelineStatus | null;
 }
 
 export interface DeviceTelemetryHistory {
@@ -143,43 +164,63 @@ export interface DeviceTelemetryHistory {
   range: TelemetryRange;
   count: number;
   metrics: DeviceTelemetryPoint[];
+  live_samples: DeviceLiveSample[];
 }
 
-export interface DeviceLiveCamera {
-  id: string;
-  channel: number;
-  name: string;
-  ipAddress: string;
-  configured_in_db: boolean;
-  status: string;
-  fps: number;
-  ai_fps: number;
-  mismatch: boolean;
-  mismatch_reason?: string;
+/** One row of GET /live-history (latest on-demand live checks, newest first). */
+export interface DeviceLiveHistorySample extends DeviceLiveSample {
+  request_id: string | null;
+  avg_temp: number | null;
+  firmware_version: string | null;
+  wifi_rssi_dbm: number | null;
+  network_type: string | null;
+  camera_health: Record<string, boolean> | null;
+  extra: Record<string, unknown> | null;
 }
 
-export interface DeviceLiveVitals {
+export interface DeviceLiveHistory {
   device_id: string;
-  online: boolean;
-  operational_status: DeviceOperationalStatus;
-  data_freshness: "REALTIME" | "STALE" | "OFFLINE";
-  source: "AWS_SHADOW" | "DATABASE_FALLBACK";
-  last_seen_at: string | null;
-  last_offline_at: string | null;
-  disconnect_reason: string | null;
-  vitals: {
-    uptime_seconds: number;
-    firmware_version: string;
-    ai_pipeline_healthy: boolean;
-    metrics: {
-      temperature_celsius?: number;
-      cpu_percent?: number;
-      memory_percent?: number;
-      disk_percent?: number;
-    } | null;
-  } | null;
-  cameras: DeviceLiveCamera[];
+  count: number;
+  samples: DeviceLiveHistorySample[];
 }
+
+export type DevicePipelineStatus = "running" | "idle_no_camera" | "stopped";
+
+export interface DeviceLiveVitalsReading {
+  temperature_celsius: number | null;
+  temperature_avg_celsius: number | null;
+  cpu_percent: number | null;
+  memory_percent: number | null;
+  disk_percent: number | null;
+  uptime_seconds: number | null;
+  firmware_version: string | null;
+  pipeline_status: DevicePipelineStatus | null;
+  network_type: string | null;
+  wifi_rssi_dbm: number | null;
+}
+
+/** Result of GET /devices/:id/live (on-demand health_check round-trip to the device). */
+export type DeviceLiveResult =
+  | {
+      status: "OFFLINE";
+      device_id: string;
+      last_seen_at: string | null;
+    }
+  | {
+      status: "NO_RESPONSE";
+      device_id: string;
+      request_id: string;
+      last_seen_at: string | null;
+    }
+  | {
+      status: "LIVE";
+      device_id: string;
+      recorded_at: string;
+      request_id: string;
+      vitals: DeviceLiveVitalsReading;
+      camera_health: Record<string, boolean> | null;
+      extra: Record<string, unknown> | null;
+    };
 
 export interface Device {
   device_id: string;
