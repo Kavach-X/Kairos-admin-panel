@@ -622,3 +622,29 @@ export interface EventAnalyticsData {
 
 
 
+
+// ─── Remote SSH tunnel (Cloudflare) ─────────────────────────────────
+
+export type DeviceTunnelState = "NOT_CREATED" | "PENDING" | "CREATED" | "FAILED";
+export type DeviceTunnelHealth = "healthy" | "degraded" | "down" | "inactive" | "unknown";
+
+export interface DeviceTunnelAuditEntry {
+  actor: string;
+  action: "CREATE" | "REPAIR" | "DELETE" | "TOKEN_FETCH" | "TOKEN_DENIED" | string;
+  result: "SUCCESS" | "FAILURE" | string;
+  detail: string | null;
+  createdAt: string;
+}
+
+/** GET /devices/admin/:deviceId/tunnel. `health` and `audit` are only present on the detail view. */
+export interface DeviceTunnelInfo {
+  device_id: string;
+  state: DeviceTunnelState;
+  tunnel_id: string | null;
+  hostname: string | null;
+  last_error: string | null;
+  last_attempt_at: string | null;
+  attempt_count: number;
+  health?: DeviceTunnelHealth;
+  audit?: DeviceTunnelAuditEntry[];
+}

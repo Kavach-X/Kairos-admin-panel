@@ -16,6 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { getDeviceByIdAction } from "@/lib/actions/device.actions";
 import { DeviceTelemetryPanel } from "@/components/dashboard/devices/device-telemetry-panel";
+import { DeviceTunnelPanel } from "@/components/dashboard/devices/device-tunnel-panel";
 import { LastSeen } from "@/components/dashboard/devices/relative-time";
 import { SectionTitle } from "@/components/dashboard/devices/section";
 import { statusBadgeStyles } from "@/components/dashboard/devices/device-status";
@@ -84,6 +85,12 @@ async function DeviceDetail({ params }: { params: Promise<{ deviceId: string }> 
         online={Boolean(currentDevice.online)}
         inventoryStatus={currentDevice.inventory_status}
         lastSeenAt={currentDevice.runtimeState?.last_seen_at ?? null}
+      />
+
+      <DeviceTunnelPanel
+        key={currentDevice.device_id}
+        deviceId={currentDevice.device_id}
+        inventoryStatus={currentDevice.inventory_status}
       />
 
       <div className="grid gap-x-4 gap-y-6 border-t border-border/60 pt-6 lg:grid-cols-2">

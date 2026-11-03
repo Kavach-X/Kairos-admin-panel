@@ -14,6 +14,7 @@ import type {
   DeviceLiveResult,
   DeviceLiveHistory,
   TelemetryRange,
+  DeviceTunnelInfo,
 } from "@/lib/types";
 
 const BACKEND_URL =
@@ -629,5 +630,78 @@ export async function getVendorsListAction(
     return { success: true, data: vendors };
   } catch (err: any) {
     return { success: false, error: err?.message || "Network error fetching vendors" };
+  }
+}
+
+// ─── 6. Remote SSH Tunnel (Cloudflare) ──────────────────────────────
+
+// Creating a tunnel makes several sequential Cloudflare calls (~5-10s); the backend gives up after 60s.
+const TUNNEL_WRITE_TIMEOUT_MS = 70_000;
+const TUNNEL_READ_TIMEOUT_MS = 15_000;
+
+export async function getDeviceTunnelAction(
+  deviceId: string
+): Promise<{ success: boolean; data?: DeviceTunnelInfo; error?: string }> {
+  try {
+    const reqHeaders = await getAdminHeaders();
+    const res = await fetch(
+      `${BACKEND_URL}/api/v1/devices/admin/${encodeURIComponent(deviceId)}/tunnel`,
+      { headers: reqHeaders, cache: "no-store", signal: AbortSignal.timeout(TUNNEL_READ_TIMEOUT_MS) }
+    );
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { success: false, error: json?.message || "Failed to load tunnel status" };
+    }
+    return { success: true, data: json.data as DeviceTunnelInfo };
+  } catch (error) {
+    const err = error as { name?: string; message?: string };
+    return { success: false, error: err?.message || "Network error loading tunnel status" };
+  }
+}
+
+/** Creates the tunnel, or repairs a failed/partial one (idempotent on the backend). */
+export async function createDeviceTunnelAction(
+  deviceId: string
+): Promise<{ success: boolean; data?: DeviceTunnelInfo; error?: string }> {
+  try {
+    const reqHeaders = await getAdminHeaders();
+    const res = await fetch(
+      `${BACKEND_URL}/api/v1/devices/admin/${encodeURIComponent(deviceId)}/tunnel`,
+      { method: "POST", headers: reqHeaders, signal: AbortSignal.timeout(TUNNEL_WRITE_TIMEOUT_MS) }
+    );
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      if (res.status === 503) {
+        return { success: false, error: "Tunnels are not enabled on the backend (check the CF_* settings)." };
+      }
+      return { success: false, error: json?.message || "Failed to create tunnel" };
+    }
+    return { success: true, data: json.data as DeviceTunnelInfo };
+  } catch (error) {
+    const err = error as { name?: string; message?: string };
+    if (err?.name === "TimeoutError" || err?.name === "AbortError") {
+      return { success: false, error: "Tunnel creation is taking too long. Check the status in a moment." };
+    }
+    return { success: false, error: err?.message || "Network error creating tunnel" };
+  }
+}
+
+export async function deleteDeviceTunnelAction(
+  deviceId: string
+): Promise<{ success: boolean; data?: DeviceTunnelInfo; error?: string }> {
+  try {
+    const reqHeaders = await getAdminHeaders();
+    const res = await fetch(
+      `${BACKEND_URL}/api/v1/devices/admin/${encodeURIComponent(deviceId)}/tunnel`,
+      { method: "DELETE", headers: reqHeaders, signal: AbortSignal.timeout(TUNNEL_WRITE_TIMEOUT_MS) }
+    );
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { success: false, error: json?.message || "Failed to remove tunnel" };
+    }
+    return { success: true, data: json.data as DeviceTunnelInfo };
+  } catch (error) {
+    const err = error as { name?: string; message?: string };
+    return { success: false, error: err?.message || "Network error removing tunnel" };
   }
 }
