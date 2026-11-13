@@ -13,10 +13,8 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import {
-  getEventDetailsAction,
-  reviewEventAction,
-} from "@/lib/actions/event.actions";
+import { getEventDetailsAction } from "@/lib/actions/event.actions";
+import { AiAnalysisSections, ManualReviewDialog, describeEventDecision } from "./review-parts";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -96,18 +94,14 @@ export function EventDetailsDialog({
 }: EventDetailsDialogProps) {
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<CameraEventDetail | null>(null);
-  const [reviewing, setReviewing] = useState<string | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [showRawJson, setShowRawJson] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
-  const [dismissReason, setDismissReason] = useState("");
-  const [showDismissInput, setShowDismissInput] = useState(false);
 
   useEffect(() => {
     if (open && initialEvent?.id) {
       setLoading(true);
       setShowRawJson(false);
-      setShowDismissInput(false);
-      setDismissReason("");
       getEventDetailsAction(initialEvent.id)
         .then((res) => {
           if (res.success && res.data) {
@@ -161,56 +155,11 @@ export function EventDetailsDialog({
 
   const thumbnailViewUrl = primaryThumbnail?.view_url || primaryThumbnail?.viewUrl || primaryThumbnail?.thumbnail_url || primaryThumbnail?.thumbnailUrl;
 
-  const aiSummary =
-    primaryThumbnail?.ai_summary ||
-    primaryThumbnail?.aiSummary ||
-    primaryVideo?.ai_summary ||
-    primaryVideo?.aiSummary;
-
-  const rawDetected =
-    primaryThumbnail?.detected_objects ||
-    primaryThumbnail?.detectedObjects ||
-    primaryVideo?.detected_objects ||
-    primaryVideo?.detectedObjects ||
-    [];
-
-  const detectedObjects: string[] = Array.isArray(rawDetected) ? rawDetected : [];
-
   const handleCopyId = () => {
     navigator.clipboard.writeText(eventId);
     setCopiedId(true);
     toast.success("Event ID copied to clipboard");
     setTimeout(() => setCopiedId(false), 2000);
-  };
-
-  const handleReview = async (reviewStatus: "CONFIRMED_ALERT" | "DISMISSED_BY_USER") => {
-    setReviewing(reviewStatus);
-    try {
-      const res = await reviewEventAction(eventId, {
-        status: reviewStatus,
-        falseAlarmReason:
-          reviewStatus === "DISMISSED_BY_USER"
-            ? (dismissReason.trim() || "Marked as false alarm from Admin Console")
-            : undefined,
-      });
-
-      if (!res.success) {
-        toast.error(res.error || "Failed to update review status");
-        return;
-      }
-
-      toast.success(
-        reviewStatus === "CONFIRMED_ALERT"
-          ? "Event confirmed as active threat"
-          : "Event dismissed as false alarm"
-      );
-      onSuccess?.();
-      onOpenChange(false);
-    } catch {
-      toast.error("Failed to submit review");
-    } finally {
-      setReviewing(null);
-    }
   };
 
   return (
@@ -374,36 +323,14 @@ export function EventDetailsDialog({
               </div>
             </div>
 
-            {/* AI Forensic Intelligence Card */}
-            {(aiSummary || detectedObjects.length > 0) && (
-              <div className="space-y-2.5 rounded-lg border border-border/60 bg-card p-3.5 shadow-xs">
-                <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                  <Sparkles className="size-3.5 text-primary" />
-                  Cloud AI Forensic Summary
-                </span>
-                {aiSummary && (
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    {aiSummary}
-                  </p>
-                )}
-
-                {detectedObjects.length > 0 && (
-                  <div className="space-y-1.5 pt-1">
-                    <span className="text-[11px] text-muted-foreground block">Recognized Entities:</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {detectedObjects.map((obj, i) => (
-                        <span
-                          key={i}
-                          className="rounded-md bg-primary/10 border border-primary/20 px-2 py-0.5 font-medium text-[11px] text-primary"
-                        >
-                          {obj}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            {/* AI analysis: snapshot and clip shown separately */}
+            <div className="space-y-2.5 rounded-lg border border-border/60 bg-card p-3.5 shadow-xs">
+              <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Sparkles className="size-3.5 text-primary" />
+                Cloud AI Analysis
+              </span>
+              <AiAnalysisSections event={event} />
+            </div>
 
             {/* Notification Dispatch Channels */}
             {alertChannels.length > 0 && (
@@ -427,43 +354,6 @@ export function EventDetailsDialog({
                 <div>
                   <p className="font-semibold">False Alarm Reason Noted:</p>
                   <p className="mt-0.5 text-muted-foreground">{falseAlarmReason}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Dismiss reason input if triggered */}
-            {showDismissInput && (
-              <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 space-y-2">
-                <span className="font-semibold text-rose-600 dark:text-rose-400 text-xs block">
-                  Dismiss as False Alarm
-                </span>
-                <input
-                  type="text"
-                  placeholder="Optional note: why was this a false alarm? (e.g. reflection, staff member)"
-                  className="w-full text-xs bg-background border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-rose-500"
-                  value={dismissReason}
-                  onChange={(e) => setDismissReason(e.target.value)}
-                />
-                <div className="flex items-center gap-2 justify-end pt-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => setShowDismissInput(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-7 text-xs bg-rose-600 hover:bg-rose-700 text-white"
-                    disabled={reviewing !== null}
-                    onClick={() => handleReview("DISMISSED_BY_USER")}
-                  >
-                    {reviewing === "DISMISSED_BY_USER" && <Loader2 className="mr-1 size-3 animate-spin" />}
-                    Confirm Dismissal
-                  </Button>
                 </div>
               </div>
             )}
@@ -493,33 +383,10 @@ export function EventDetailsDialog({
         {/* Modal Actions Footer */}
         <DialogFooter className="p-4 border-t border-border/40 flex-col sm:flex-row sm:justify-between gap-2">
           <div className="flex items-center gap-2">
-            {!showDismissInput && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="text-rose-600 border-rose-500/30 hover:bg-rose-500/10 text-xs"
-                disabled={reviewing !== null || status === "DISMISSED_BY_USER"}
-                onClick={() => setShowDismissInput(true)}
-              >
-                <XCircle className="mr-1.5 size-3.5" />
-                Mark False Alarm
-              </Button>
-            )}
-
-            <Button
-              type="button"
-              size="sm"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
-              disabled={reviewing !== null || status === "CONFIRMED_ALERT"}
-              onClick={() => handleReview("CONFIRMED_ALERT")}
-            >
-              {reviewing === "CONFIRMED_ALERT" ? (
-                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-              ) : (
-                <CheckCircle2 className="mr-1.5 size-3.5" />
-              )}
-              Confirm Threat
+            <span className="text-[11px] text-muted-foreground hidden sm:inline">{describeEventDecision(event).title}</span>
+            <Button type="button" variant="outline" size="sm" className="text-xs gap-1.5" onClick={() => setReviewOpen(true)}>
+              <ShieldAlert className="size-3.5" />
+              Review manually
             </Button>
           </div>
 
@@ -547,6 +414,15 @@ export function EventDetailsDialog({
           </div>
         </DialogFooter>
       </DialogContent>
+      <ManualReviewDialog
+        event={event}
+        open={reviewOpen}
+        onOpenChange={setReviewOpen}
+        onDone={() => {
+          onSuccess?.();
+          onOpenChange(false);
+        }}
+      />
     </Dialog>
   );
 }

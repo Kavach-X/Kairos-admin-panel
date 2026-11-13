@@ -11,8 +11,6 @@ import {
   Video,
   Clock,
   ShieldAlert,
-  CheckCircle2,
-  XCircle,
   AlertTriangle,
   ExternalLink,
   Copy,
@@ -36,10 +34,8 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import {
-  getEventDetailsAction,
-  reviewEventAction,
-} from "@/lib/actions/event.actions";
+import { getEventDetailsAction } from "@/lib/actions/event.actions";
+import { AiAnalysisSections, ManualReviewDialog, describeEventDecision } from "./review-parts";
 import type { CameraEventDetail, EventThreatLevel } from "@/lib/types";
 
 const threatBadges: Record<
@@ -115,10 +111,8 @@ export function EventDetailClient({ initial }: { initial: EventDetailInitial }) 
   const [event, setEvent] = React.useState<CameraEventDetail | null>(initial.event);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(initial.error);
-  const [reviewing, setReviewing] = React.useState<string | null>(null);
+  const [reviewOpen, setReviewOpen] = React.useState(false);
   const [copiedId, setCopiedId] = React.useState(false);
-  const [dismissReason, setDismissReason] = React.useState("");
-  const [showDismissInput, setShowDismissInput] = React.useState(false);
 
   // Active preview selection (null = default to primary video/thumbnail)
   const initialMedia = initial.event ? getInitialMedia(initial.event) : { url: null, type: "video" as const };
@@ -167,38 +161,6 @@ export function EventDetailClient({ initial }: { initial: EventDetailInitial }) 
     setCopiedId(true);
     toast.success("Event ID copied to clipboard");
     setTimeout(() => setCopiedId(false), 2000);
-  };
-
-  const handleReview = async (reviewStatus: "CONFIRMED_ALERT" | "DISMISSED_BY_USER") => {
-    if (!eventId) return;
-    setReviewing(reviewStatus);
-    try {
-      const res = await reviewEventAction(eventId, {
-        status: reviewStatus,
-        falseAlarmReason:
-          reviewStatus === "DISMISSED_BY_USER"
-            ? (dismissReason.trim() || "Dismissed as false alarm from Security Operator Console")
-            : undefined,
-      });
-
-      if (!res.success) {
-        toast.error(res.error || "Failed to update review status");
-        return;
-      }
-
-      toast.success(
-        reviewStatus === "CONFIRMED_ALERT"
-          ? "Event confirmed as active security threat"
-          : "Event dismissed as false alarm"
-      );
-      setShowDismissInput(false);
-      setDismissReason("");
-      fetchEvent();
-    } catch {
-      toast.error("Failed to submit review");
-    } finally {
-      setReviewing(null);
-    }
   };
 
   // High-fidelity zero-layout-shift Skeleton Loader
@@ -357,22 +319,6 @@ export function EventDetailClient({ initial }: { initial: EventDetailInitial }) 
     primaryVideo?.aiStatus === "FAILED" ||
     primaryThumbnail?.aiStatus === "FAILED";
 
-  const hasCloudAiAnalysis =
-    Boolean(primaryThumbnail?.aiSummary) ||
-    Boolean(primaryVideo?.aiSummary) ||
-    event.status === "CONFIRMED_ALERT" ||
-    event.status === "DISCARDED_FALSE_ALARM";
-
-  const aiSummary =
-    primaryThumbnail?.aiSummary ||
-    primaryVideo?.aiSummary ||
-    null;
-
-  const detectedObjects =
-    primaryThumbnail?.detectedObjects ||
-    primaryVideo?.detectedObjects ||
-    [];
-
   // Email Notification Variation classification based on alert threat level
   const emailVariation =
     event.threatLevel === "CRITICAL" || event.threatLevel === "HIGH"
@@ -428,7 +374,7 @@ export function EventDetailClient({ initial }: { initial: EventDetailInitial }) 
               </Badge>
             ) : event.status === "RECORDED" ? (
               <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 font-medium">
-                Pending Cloud
+                {primaryThumbnail?.aiStatus === "COMPLETED" ? "Snapshot Clear · Awaiting Clip" : "Pending Cloud"}
               </Badge>
             ) : event.status === "PENDING_UPLOAD" ? (
               <Badge variant="outline" className="text-xs bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30 font-medium">
@@ -668,72 +614,7 @@ export function EventDetailClient({ initial }: { initial: EventDetailInitial }) 
               </div>
             </CardHeader>
             <CardContent className="pt-4 space-y-4 text-xs">
-              {hasCloudAiAnalysis && aiSummary ? (
-                <>
-                  <div>
-                    <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
-                      Cloud AI Forensic Narrative
-                    </span>
-                    <p className="text-xs text-foreground leading-relaxed bg-muted/30 p-3 rounded-lg border border-border/40">
-                      {aiSummary}
-                    </p>
-                  </div>
-
-                  {detectedObjects.length > 0 && (
-                    <div>
-                      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
-                        Recognized Entities & Classification Tags
-                      </span>
-                      <div className="flex flex-wrap gap-2">
-                        {detectedObjects.map((obj, i) => (
-                          <span
-                            key={i}
-                            className="rounded-md bg-primary/10 border border-primary/20 px-2.5 py-1 font-medium text-xs text-primary"
-                          >
-                            {obj}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : isActivelyAnalyzing ? (
-                /* Cloud AI Analysis Pending Cloud State */
-                <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4 space-y-2">
-                  <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold text-xs">
-                    <Info className="size-4 shrink-0 text-blue-500" />
-                    <span>Cloud AI Evaluation: Pending Cloud</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    The EdgeBox has recorded and uploaded this clip. The Cloud AI evaluation worker is queued or processing stream chunks.
-                  </p>
-                </div>
-              ) : isFailed ? (
-                /* Failed Analysis State */
-                <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-4 space-y-2">
-                  <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-semibold text-xs">
-                    <AlertTriangle className="size-4 shrink-0 text-rose-500" />
-                    <span>Cloud AI Evaluation: Worker Timeout / Analysis Failed</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Cloud AI inference encountered an error or timeout. The recorded media is securely preserved and available for manual security review.
-                  </p>
-                </div>
-              ) : (
-                /* Informative Pending / In-Queue Flow State */
-                <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4 space-y-2">
-                  <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold text-xs">
-                    <Info className="size-4 shrink-0" />
-                    <span>Cloud AI Evaluation: In Processing Flow / Awaiting Worker</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    This incident clip was successfully captured and recorded on-site by the EdgeBox hardware. The Cloud AI evaluation worker is queued or awaiting flow dispatch for this session.
-                  </p>
-                  <p className="text-[11px] text-muted-foreground pt-1">
-                    All on-premise video recordings and keyframes remain safely stored and intact. Security operators can inspect the footage above and manually confirm threat or dismiss false alarm using the controls on the right.
-                  </p>
-                </div>
-              )}
+              <AiAnalysisSections event={event} />
 
               {/* False Alarm Notice if present */}
               {event.falseAlarmReason && (
@@ -751,83 +632,29 @@ export function EventDetailClient({ initial }: { initial: EventDetailInitial }) 
 
         {/* Right Column (Hardware EdgeBox, Customer, Triage & Notifications) */}
         <div className="space-y-6">
-          {/* Security Operator Triage Card */}
+          {/* Manual review: the operator opens a modal to settle or overrule the AI */}
           <Card className="border-border/60 shadow-xs">
             <CardHeader className="pb-3 border-b border-border/40">
               <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <ShieldAlert className="size-4 text-primary" />
-                Security Operator Triage
+                Decision
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-4 space-y-3 text-xs">
-              <p className="text-muted-foreground leading-relaxed">
-                Review this incident and confirm whether it represents an active security threat or a discarded false alarm.
-              </p>
-
-              {!showDismissInput ? (
-                <div className="grid grid-cols-2 gap-2 pt-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="text-rose-600 border-rose-500/30 hover:bg-rose-500/10 text-xs gap-1.5"
-                    disabled={reviewing !== null || event.status === "DISMISSED_BY_USER"}
-                    onClick={() => setShowDismissInput(true)}
-                  >
-                    <XCircle className="size-3.5" />
-                    False Alarm
-                  </Button>
-
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1.5"
-                    disabled={reviewing !== null || event.status === "CONFIRMED_ALERT"}
-                    onClick={() => handleReview("CONFIRMED_ALERT")}
-                  >
-                    {reviewing === "CONFIRMED_ALERT" ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="size-3.5" />
-                    )}
-                    Confirm Threat
-                  </Button>
-                </div>
-              ) : (
-                <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 space-y-2 mt-2">
-                  <span className="font-semibold text-rose-600 dark:text-rose-400 text-xs block">
-                    Dismiss as False Alarm
-                  </span>
-                  <input
-                    type="text"
-                    placeholder="Reason (e.g. store employee, animal, lighting change)..."
-                    className="w-full text-xs bg-background border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-rose-500"
-                    value={dismissReason}
-                    onChange={(e) => setDismissReason(e.target.value)}
-                  />
-                  <div className="flex items-center gap-2 justify-end pt-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => setShowDismissInput(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-7 text-xs bg-rose-600 hover:bg-rose-700 text-white"
-                      disabled={reviewing !== null}
-                      onClick={() => handleReview("DISMISSED_BY_USER")}
-                    >
-                      {reviewing === "DISMISSED_BY_USER" && <Loader2 className="mr-1 size-3 animate-spin" />}
-                      Dismiss
-                    </Button>
+              {(() => {
+                const decision = describeEventDecision(event);
+                return (
+                  <div>
+                    <p className="font-semibold text-foreground">{decision.title}</p>
+                    {decision.detail && <p className="mt-1 text-muted-foreground leading-relaxed">{decision.detail}</p>}
                   </div>
-                </div>
-              )}
+                );
+              })()}
+              <Button type="button" variant="outline" size="sm" className="w-full text-xs gap-1.5" onClick={() => setReviewOpen(true)}>
+                <ShieldAlert className="size-3.5" />
+                Review manually
+              </Button>
+              <ManualReviewDialog event={event} open={reviewOpen} onOpenChange={setReviewOpen} onDone={fetchEvent} />
             </CardContent>
           </Card>
 

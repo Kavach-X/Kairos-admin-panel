@@ -206,6 +206,9 @@ function normalizeEventDetail(raw: any): CameraEventDetail {
     totalDurationSeconds: raw.totalDurationSeconds ?? raw.total_duration_seconds ?? 0,
     videoCount: raw.videoCount ?? raw.video_count ?? 0,
     alertDispatchedAt: raw.alertDispatchedAt ?? raw.alert_dispatched_at ?? null,
+    reviewedAt: raw.reviewedAt ?? raw.reviewed_at ?? null,
+    reviewedByUserId: raw.reviewedByUserId ?? raw.reviewed_by_user_id ?? null,
+    statusBeforeReview: raw.statusBeforeReview ?? raw.status_before_review ?? null,
     alertChannels: raw.alertChannels ?? raw.alert_channels ?? [],
     createdAt: raw.createdAt ?? raw.created_at ?? new Date().toISOString(),
     updatedAt: raw.updatedAt ?? raw.updated_at ?? new Date().toISOString(),
@@ -270,6 +273,7 @@ export async function reviewEventAction(
   data: {
     status: "CONFIRMED_ALERT" | "DISMISSED_BY_USER";
     falseAlarmReason?: string;
+    threatLevel?: "MEDIUM" | "HIGH" | "CRITICAL";
   }
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {

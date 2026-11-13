@@ -573,6 +573,12 @@ export interface CameraEventItem {
   status: EventIncidentStatus;
   falseAlarmReason: string | null;
   false_alarm_reason?: string | null;
+  reviewedAt?: string | null;
+  reviewed_at?: string | null;
+  reviewedByUserId?: string | null;
+  reviewed_by_user_id?: string | null;
+  statusBeforeReview?: EventIncidentStatus | null;
+  status_before_review?: EventIncidentStatus | null;
   isOngoing: boolean;
   is_ongoing?: boolean;
   totalDurationSeconds: number;
