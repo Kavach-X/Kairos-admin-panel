@@ -15,6 +15,8 @@ import type {
   DeviceLiveHistory,
   TelemetryRange,
   DeviceTunnelInfo,
+  CloudflareFixMode,
+  CloudflareFixResult,
 } from "@/lib/types";
 
 const BACKEND_URL =
@@ -703,5 +705,42 @@ export async function deleteDeviceTunnelAction(
   } catch (error) {
     const err = error as { name?: string; message?: string };
     return { success: false, error: err?.message || "Network error removing tunnel" };
+  }
+}
+
+// The backend waits up to 60s (restart) / 100s (reinstall) for the device's ack, so allow a bit more.
+const CLOUDFLARE_FIX_TIMEOUT_MS: Record<CloudflareFixMode, number> = { restart: 70_000, reinstall: 110_000 };
+
+/** Restart or force-reinstall cloudflared on the device. Resolves once the device acks (or the backend gives up). */
+export async function fixDeviceCloudflareAction(
+  deviceId: string,
+  mode: CloudflareFixMode
+): Promise<{ success: boolean; data?: CloudflareFixResult; error?: string }> {
+  try {
+    const reqHeaders = await getAdminHeaders();
+    const res = await fetch(
+      `${BACKEND_URL}/api/v1/devices/admin/${encodeURIComponent(deviceId)}/cloudflare-fix`,
+      {
+        method: "POST",
+        headers: { ...reqHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+        cache: "no-store",
+        signal: AbortSignal.timeout(CLOUDFLARE_FIX_TIMEOUT_MS[mode]),
+      }
+    );
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      if (res.status === 409) return { success: false, error: "A tunnel fix is already running on this device." };
+      if (res.status === 429) return { success: false, error: "Too many tunnel fix requests. Wait a moment and try again." };
+      if (res.status === 502) return { success: false, error: "Could not send the command to the device (publish to AWS IoT failed). Try again." };
+      return { success: false, error: json?.message || "Failed to run the tunnel fix" };
+    }
+    return { success: true, data: json.data as CloudflareFixResult };
+  } catch (error) {
+    const err = error as { name?: string; message?: string };
+    if (err?.name === "TimeoutError" || err?.name === "AbortError") {
+      return { success: false, error: "No answer in time. The fix may still be running on the device; check the status in a moment." };
+    }
+    return { success: false, error: err?.message || "Network error running the tunnel fix" };
   }
 }

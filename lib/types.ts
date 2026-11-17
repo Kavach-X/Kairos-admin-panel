@@ -654,3 +654,19 @@ export interface DeviceTunnelInfo {
   health?: DeviceTunnelHealth;
   audit?: DeviceTunnelAuditEntry[];
 }
+
+export type CloudflareFixMode = "restart" | "reinstall";
+
+/** POST /devices/admin/:deviceId/cloudflare-fix */
+export type CloudflareFixResult =
+  | { status: "OFFLINE"; device_id: string; last_seen_at: string | null }
+  | { status: "NO_RESPONSE"; device_id: string; request_id: string; mode: CloudflareFixMode }
+  | {
+      status: "OK";
+      device_id: string;
+      request_id: string;
+      mode: CloudflareFixMode | null;
+      ok: boolean;
+      cloudflared_active: boolean | null;
+      error: string | null;
+    };

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, Check, Copy, Loader2, Network, Plus, RefreshCw, Terminal, Trash2 } from "lucide-react";
+import { AlertTriangle, Check, Copy, Loader2, Network, Plus, RefreshCw, RotateCw, Terminal, Trash2, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,9 +9,10 @@ import { ConfirmModal } from "@/components/ui/confirm-modal";
 import {
   createDeviceTunnelAction,
   deleteDeviceTunnelAction,
+  fixDeviceCloudflareAction,
   getDeviceTunnelAction,
 } from "@/lib/actions/device.actions";
-import type { DeviceTunnelHealth, DeviceTunnelInfo } from "@/lib/types";
+import type { CloudflareFixMode, DeviceTunnelHealth, DeviceTunnelInfo } from "@/lib/types";
 import { CARD, Field, SectionTitle } from "./section";
 import { TunnelMorph } from "./tunnel-morph";
 
@@ -26,6 +27,12 @@ const HEALTH_BADGE: Record<DeviceTunnelHealth, { label: string; variant: "succes
   down: { label: "Device not connected", variant: "destructive" },
   inactive: { label: "Waiting for device", variant: "outline" },
   unknown: { label: "Health unknown", variant: "outline" },
+};
+
+// Matches the backend's wait window for the device's ack.
+const FIX_WAIT_LABEL: Record<CloudflareFixMode, string> = {
+  restart: "This can take up to a minute.",
+  reinstall: "This can take a minute or two. SSH will drop briefly.",
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -66,6 +73,8 @@ export function DeviceTunnelPanel({
   const [busy, setBusy] = React.useState<"create" | "delete" | null>(null);
   const [elapsed, setElapsed] = React.useState(0);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const [confirmReinstall, setConfirmReinstall] = React.useState(false);
+  const [fixing, setFixing] = React.useState<CloudflareFixMode | null>(null);
 
   const apply = React.useCallback((res: Awaited<ReturnType<typeof getDeviceTunnelAction>>) => {
     if (res.success && res.data) {
@@ -110,11 +119,36 @@ export function DeviceTunnelPanel({
 
   // Elapsed-seconds counter while we wait on Cloudflare.
   React.useEffect(() => {
-    if (!busy) return;
+    if (!busy && !fixing) return;
     const started = Date.now();
     const id = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 500);
     return () => clearInterval(id);
-  }, [busy]);
+  }, [busy, fixing]);
+
+  const runFix = async (mode: CloudflareFixMode) => {
+    setElapsed(0);
+    setFixing(mode);
+    const res = await fixDeviceCloudflareAction(deviceId, mode);
+    const label = mode === "restart" ? "Tunnel restart" : "Tunnel reinstall";
+    if (!res.success || !res.data) {
+      toast.error(res.error || "Something went wrong");
+    } else if (res.data.status === "OFFLINE") {
+      toast.error("Device is offline", { description: "The tunnel can only be fixed while the device is connected." });
+    } else if (res.data.status === "NO_RESPONSE") {
+      toast.warning("Device did not respond", {
+        description: "It may still be working on it. Wait a moment, then try again.",
+        action: { label: "Retry", onClick: () => void runFix(mode) },
+        duration: 10_000,
+      });
+    } else if (res.data.ok && res.data.cloudflared_active !== false) {
+      toast.success(`${label} finished`, { description: "The tunnel service is running again." });
+    } else {
+      toast.error(`${label} failed`, { description: res.data.error || "The tunnel service is not running." });
+    }
+    await refresh();
+    setFixing(null);
+    setConfirmReinstall(false);
+  };
 
   const run = async (kind: "create" | "delete") => {
     setElapsed(0);
@@ -133,6 +167,7 @@ export function DeviceTunnelPanel({
 
   const decommissioned = inventoryStatus === "DECOMMISSIONED";
   const working = busy !== null || state === "PENDING";
+  const fixBusy = fixing !== null;
   const health = info?.health ?? "unknown";
 
   let badge: React.ReactNode = null;
@@ -255,6 +290,37 @@ export function DeviceTunnelPanel({
               </div>
             </div>
 
+            {state === "CREATED" && (
+              <div className="flex flex-col gap-2 border-t border-border/60 pt-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={fixBusy || working}
+                    onClick={() => void runFix("restart")}
+                  >
+                    {fixing === "restart" ? <Loader2 className="animate-spin" /> : <RotateCw />}
+                    Restart Tunnel
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={fixBusy || working}
+                    onClick={() => setConfirmReinstall(true)}
+                  >
+                    {fixing === "reinstall" ? <Loader2 className="animate-spin" /> : <Wrench />}
+                    Reinstall Tunnel (Force)
+                  </Button>
+                </div>
+                {fixing ? (
+                  <p className="text-[11px] text-muted-foreground" aria-live="polite">
+                    {fixing === "restart" ? "Restarting the tunnel service on the device" : "Reinstalling the tunnel service on the device"}
+                    {" "}({elapsed}s). {FIX_WAIT_LABEL[fixing]}
+                  </p>
+                ) : null}
+              </div>
+            )}
+
             {info.hostname && (
               <div className="grid gap-x-4 gap-y-3 border-t border-border/60 pt-4 sm:grid-cols-2">
                 <Field label="Hostname" mono>
@@ -303,6 +369,25 @@ export function DeviceTunnelPanel({
           </>
         )}
       </div>
+
+      <ConfirmModal
+        open={confirmReinstall}
+        onOpenChange={(open) => {
+          if (!fixBusy) setConfirmReinstall(open);
+        }}
+        title="Reinstall tunnel service"
+        description={
+          <>
+            This uninstalls and reinstalls the Cloudflare tunnel service on <strong>{deviceId}</strong> with a fresh
+            token. Remote SSH access will drop for about 40 seconds, and the device may briefly show as offline. This
+            can take up to two minutes.
+          </>
+        }
+        confirmText="Reinstall tunnel"
+        variant="warning"
+        loading={fixing === "reinstall"}
+        onConfirm={() => runFix("reinstall")}
+      />
 
       <ConfirmModal
         open={confirmDelete}
