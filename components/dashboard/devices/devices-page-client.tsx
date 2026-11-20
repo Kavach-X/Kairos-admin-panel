@@ -1,13 +1,9 @@
 "use client";
 
 import * as React from "react";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Search,
+  AlertTriangle,
   Plus,
   HardDrive,
   Store,
@@ -27,7 +23,6 @@ import {
   Trash2,
   Unlink,
   CheckCircle2,
-  X,
   PowerOff,
   Wrench,
 } from "lucide-react";
@@ -40,9 +35,12 @@ import {
   returnToStockAction,
 } from "@/lib/actions/device.actions";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
+import { PageHeader, SearchBox, StatusTabs, countBy } from "@/components/dashboard/list-page";
+import { StatTile } from "@/components/dashboard/stat-tile";
+import { TimeAgo } from "@/components/dashboard/overview/time-ago";
 import dynamic from "next/dynamic";
 
-// Dialogs and the details sheet are only needed after a click; load them off the critical path.
+// Dialogs are only needed after a click; load them off the critical path.
 const FactoryRegisterModal = dynamic(() =>
   import("@/components/dashboard/devices/factory-register-modal").then((m) => m.FactoryRegisterModal)
 );
@@ -51,9 +49,6 @@ const DispatchVendorModal = dynamic(() =>
 );
 const ShipCustomerModal = dynamic(() =>
   import("@/components/dashboard/devices/ship-customer-modal").then((m) => m.ShipCustomerModal)
-);
-const DeviceDetailsSheet = dynamic(() =>
-  import("@/components/dashboard/devices/device-details-sheet").then((m) => m.DeviceDetailsSheet)
 );
 import { toast } from "sonner";
 
@@ -106,14 +101,12 @@ interface DevicesPageClientProps {
   devices: Device[];
   models: DeviceModel[];
   vendors: Array<{ id: string; name: string; vendorCode?: string }>;
-  initialSelectedDeviceId?: string;
 }
 
 export function DevicesPageClient({
   devices,
   models,
   vendors,
-  initialSelectedDeviceId,
 }: DevicesPageClientProps) {
   const [activeTab, setActiveTab] = React.useState("ALL");
   const [search, setSearch] = React.useState("");
@@ -124,14 +117,8 @@ export function DevicesPageClient({
   const [dispatchInitialDevice, setDispatchInitialDevice] = React.useState<Device | null>(null);
   const [shipDevice, setShipDevice] = React.useState<Device | null>(null);
 
-  // Deep-link support (?selected=KBX-001-TEST): resolved server-side, opened
-  // here by id so it always reflects the live `devices` prop.
-  const [selectedDeviceId, setSelectedDeviceId] = React.useState<string | null>(
-    initialSelectedDeviceId?.toUpperCase() || null
-  );
-  const selectedDevice = selectedDeviceId
-    ? devices.find((d) => d.device_id.toUpperCase() === selectedDeviceId.toUpperCase()) || null
-    : null;
+  const router = useRouter();
+  const deviceHref = (deviceId: string) => `/dashboard/devices/${encodeURIComponent(deviceId)}`;
 
   // Client-side instantaneous filtering: 0ms lag, zero network requests on
   // tab switch or search — `devices` is the full fleet fetched server-side.
@@ -159,6 +146,10 @@ export function DevicesPageClient({
   const inStockCount = devices.filter((d) => d.inventory_status === "IN_STOCK").length;
   const withVendorCount = devices.filter((d) => d.inventory_status === "WITH_VENDOR").length;
   const installedCount = devices.filter((d) => d.inventory_status === "INSTALLED").length;
+  const installedOnline = devices.filter((d) => d.inventory_status === "INSTALLED" && d.online).length;
+  const installedOffline = installedCount - installedOnline;
+  const decommissionedCount = devices.filter((d) => d.inventory_status === "DECOMMISSIONED").length;
+  const statusCounts = React.useMemo(() => countBy(devices, (d) => d.inventory_status), [devices]);
 
   const [confirmDialog, setConfirmDialog] = React.useState<{
     type: "DELETE" | "DECOMMISSION" | "UNASSIGN" | "MAINTENANCE" | "RESTOCK";
@@ -230,170 +221,82 @@ export function DevicesPageClient({
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pb-1">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight text-foreground">
-            Hardware Devices
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            Edge box fleet allocation, warehouse inventory, and customer store assignments
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              setDispatchInitialDevice(null);
-              setIsDispatchOpen(true);
-            }}
-            className="h-8 text-xs font-normal gap-1.5"
-          >
-            <Store className="h-3.5 w-3.5 text-muted-foreground" />
-            Dispatch Stock
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => setIsRegisterOpen(true)}
-            className="h-8 text-xs font-normal gap-1.5"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add Device
-          </Button>
-        </div>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-border/50 bg-card p-4 shadow-none hover:border-border transition-colors duration-100">
-          <CardContent className="p-0 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                Total Fleet
-              </span>
-              <span className="font-mono text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                registered
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="font-mono text-2xl font-bold tracking-tight text-foreground">
-                {totalFleet}
-              </span>
-              <span className="text-[11px] text-muted-foreground/70">
-                hardware boxes
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card p-4 shadow-none hover:border-border transition-colors duration-100">
-          <CardContent className="p-0 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                In Stock
-              </span>
-              <span className="font-mono text-[11px] font-medium text-blue-600 dark:text-blue-400">
-                warehouse
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="font-mono text-2xl font-bold tracking-tight text-foreground">
-                {inStockCount}
-              </span>
-              <span className="text-[11px] text-muted-foreground/70">
-                ready to ship
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card p-4 shadow-none hover:border-border transition-colors duration-100">
-          <CardContent className="p-0 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                With Vendor
-              </span>
-              <span className="font-mono text-[11px] font-medium text-amber-600 dark:text-amber-400">
-                partner stock
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="font-mono text-2xl font-bold tracking-tight text-foreground">
-                {withVendorCount}
-              </span>
-              <span className="text-[11px] text-muted-foreground/70">
-                field custody
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card p-4 shadow-none hover:border-border transition-colors duration-100">
-          <CardContent className="p-0 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                Installed
-              </span>
-              <span className="font-mono text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                at stores
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="font-mono text-2xl font-bold tracking-tight text-foreground">
-                {installedCount}
-              </span>
-              <span className="text-[11px] text-muted-foreground/70">
-                live surveillance
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Tabs & Search */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-        <div className="flex flex-wrap items-center gap-1 p-1 bg-muted/40 rounded-md border border-border/50">
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => setActiveTab(tab.value)}
-              className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
-                activeTab === tab.value
-                  ? "bg-card text-foreground shadow-none border border-border/60"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-              }`}
+      <PageHeader
+        title="Hardware Devices"
+        subtitle="Edge box fleet allocation, warehouse inventory, and customer store assignments"
+        actions={
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setDispatchInitialDevice(null);
+                setIsDispatchOpen(true);
+              }}
+              className="h-8 gap-1.5 text-xs font-normal"
             >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+              <Store className="h-3.5 w-3.5 text-muted-foreground" />
+              Dispatch Stock
+            </Button>
+            <Button size="sm" onClick={() => setIsRegisterOpen(true)} className="h-8 gap-1.5 text-xs font-normal">
+              <Plus className="h-3.5 w-3.5" />
+              Add Device
+            </Button>
+          </>
+        }
+      />
 
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1 sm:w-64">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              placeholder="Search ID, MAC, Customer..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 pr-8 text-xs h-8 border-border/50 bg-card shadow-none"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch("")}
-                className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile
+          label="Total fleet"
+          value={String(totalFleet)}
+          info="Every edge box registered in the system, wherever it is right now: in our warehouse, with a vendor, at a customer, or in repair."
+          footer={<span className="text-[11px] text-muted-foreground">{decommissionedCount} decommissioned</span>}
+        />
+        <StatTile
+          label="In stock"
+          value={String(inStockCount)}
+          info="Boxes sitting in our warehouse, tested and ready to send to a vendor or a customer."
+          footer={<span className="text-[11px] text-muted-foreground">Ready to ship</span>}
+        />
+        <StatTile
+          label="With vendors"
+          value={String(withVendorCount)}
+          info="Boxes handed to installation partners (vendors) who will fit them at customer sites."
+          footer={<span className="text-[11px] text-muted-foreground">Partner stock</span>}
+        />
+        <StatTile
+          label="Installed"
+          value={String(installedCount)}
+          info="Boxes running at customer sites. The line below shows how many of those are connected right now; an offline box cannot detect anything."
+          footer={
+            installedOffline > 0 ? (
+              <span className="flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-400">
+                <AlertTriangle className="size-3" />
+                {installedOnline} online · {installedOffline} offline
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400">
+                <CheckCircle2 className="size-3" />
+                All {installedOnline} online
+              </span>
+            )
+          }
+        />
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <StatusTabs
+          label="Device status"
+          tabs={STATUS_TABS.map((t) => ({ ...t, count: t.value === "ALL" ? devices.length : (statusCounts[t.value] ?? 0) }))}
+          active={activeTab}
+          onChange={setActiveTab}
+        />
+        <SearchBox value={search} onChange={setSearch} placeholder="Search ID, MAC, serial, model or customer..." />
       </div>
 
       {/* Devices Table */}
-      <div className="overflow-hidden border border-border/50 bg-card shadow-none">
+      <div className="overflow-hidden rounded-lg border border-border/60 bg-card">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-muted/30 border-b border-border/40 text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -434,7 +337,8 @@ export function DevicesPageClient({
                     <tr
                       key={device.device_id}
                       className="hover:bg-muted/20 transition-colors cursor-pointer"
-                      onClick={() => setSelectedDeviceId(device.device_id)}
+                      onClick={() => router.push(deviceHref(device.device_id))}
+                      onMouseEnter={() => router.prefetch(deviceHref(device.device_id))}
                     >
                       <td className="px-4 py-3">
                         <div className="font-mono font-semibold text-foreground flex items-center gap-1.5">
@@ -464,22 +368,13 @@ export function DevicesPageClient({
 
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
-                          <span
-                            className={`h-2 w-2 rounded-full ${
-                              device.online
-                                ? "bg-emerald-500 animate-pulse"
-                                : "bg-zinc-400"
-                            }`}
-                          />
-                          <span
-                            className={
-                              device.online
-                                ? "text-emerald-600 dark:text-emerald-400 font-medium"
-                                : "text-muted-foreground"
-                            }
-                          >
+                          <span className={`h-2 w-2 shrink-0 rounded-full ${device.online ? "bg-emerald-500" : "bg-zinc-400"}`} />
+                          <span className={device.online ? "font-medium text-emerald-700 dark:text-emerald-400" : "text-muted-foreground"}>
                             {device.online ? "Online" : "Offline"}
                           </span>
+                          {!device.online && device.runtimeState?.last_seen_at && (
+                            <TimeAgo iso={device.runtimeState.last_seen_at} className="text-[10px] text-muted-foreground/80" />
+                          )}
                         </div>
                       </td>
 
@@ -531,7 +426,7 @@ export function DevicesPageClient({
                             <MoreVertical className="h-3.5 w-3.5" />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-44">
-                            <DropdownMenuItem onClick={() => setSelectedDeviceId(device.device_id)}>
+                            <DropdownMenuItem onClick={() => router.push(deviceHref(device.device_id))}>
                               <Eye className="mr-2 h-3.5 w-3.5" />
                               View Details
                             </DropdownMenuItem>
@@ -631,7 +526,7 @@ export function DevicesPageClient({
         </div>
       </div>
 
-      {/* Modals & Sheets */}
+      {/* Modals */}
       <FactoryRegisterModal
         open={isRegisterOpen}
         onOpenChange={setIsRegisterOpen}
@@ -650,16 +545,6 @@ export function DevicesPageClient({
         open={Boolean(shipDevice)}
         onOpenChange={(open) => !open && setShipDevice(null)}
         device={shipDevice}
-      />
-
-      <DeviceDetailsSheet
-        open={Boolean(selectedDevice)}
-        onOpenChange={(open) => !open && setSelectedDeviceId(null)}
-        device={selectedDevice}
-        onDelete={(id) => setConfirmDialog({ type: "DELETE", device: { device_id: id } })}
-        onDecommission={(id) => setConfirmDialog({ type: "DECOMMISSION", device: { device_id: id } })}
-        onMoveToMaintenance={(id) => setConfirmDialog({ type: "MAINTENANCE", device: { device_id: id } })}
-        onReturnToStock={(id) => setConfirmDialog({ type: "RESTOCK", device: { device_id: id } })}
       />
 
       {/* Unified Confirmation Dialog */}

@@ -1,11 +1,11 @@
 import { Suspense } from "react";
 import { getEventDetailsAction } from "@/lib/actions/event.actions";
 import { EventDetailClient } from "@/components/dashboard/activity/event-detail-client";
-import { DetailPageSkeleton } from "@/components/dashboard/page-skeletons";
+import { EventDetailSkeleton } from "@/components/dashboard/page-skeletons";
 
 export default function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
   return (
-    <Suspense fallback={<DetailPageSkeleton />}>
+    <Suspense fallback={<EventDetailSkeleton />}>
       <EventDetailPageData params={params} />
     </Suspense>
   );
@@ -18,5 +18,5 @@ async function EventDetailPageData({ params }: { params: Promise<{ id: string }>
     event: res.success && res.data ? res.data : null,
     error: res.success && res.data ? null : res.error || "Event telemetry record not found",
   };
-  return <EventDetailClient initial={initial} />;
+  return <EventDetailClient key={id} initial={initial} />;
 }

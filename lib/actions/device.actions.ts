@@ -1,5 +1,6 @@
 "use server";
 
+import { backendFetch } from "@/lib/backend-fetch";
 import { cache } from "react";
 import { headers, cookies } from "next/headers";
 import { revalidatePath, updateTag } from "next/cache";
@@ -61,7 +62,7 @@ export async function getDeviceModelsAction(
   try {
     const reqHeaders = await getAdminHeaders();
     const query = isActiveOnly ? "?is_active=true" : "";
-    const res = await fetch(`${BACKEND_URL}/api/v1/devices/models${query}`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/devices/models${query}`, {
       headers: reqHeaders,
       cache: "no-store",
     });
@@ -86,7 +87,7 @@ export async function createDeviceModelAction(data: {
 }): Promise<{ success: boolean; data?: DeviceModel; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/devices/admin/models`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/devices/admin/models`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify(data),
@@ -118,7 +119,7 @@ export async function updateDeviceModelAction(
 ): Promise<{ success: boolean; data?: DeviceModel; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/devices/admin/models/${encodeURIComponent(code)}`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/devices/admin/models/${encodeURIComponent(code)}`, {
       method: "PATCH",
       headers: reqHeaders,
       body: JSON.stringify(data),
@@ -174,7 +175,7 @@ export const getDevicesAction = cache(async function getDevicesAction(params?: {
     const queryStr = searchParams.toString();
     const url = `${BACKEND_URL}/api/v1/devices${queryStr ? `?${queryStr}` : ""}`;
 
-    const res = await fetch(url, {
+    const res = await backendFetch(url, {
       headers: reqHeaders,
       cache: "no-store",
     });
@@ -204,7 +205,7 @@ export async function getDeviceByIdAction(
 ): Promise<{ success: boolean; data?: Device; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/devices/${encodeURIComponent(deviceId)}`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/devices/${encodeURIComponent(deviceId)}`, {
       headers: reqHeaders,
       cache: "no-store",
     });
@@ -226,7 +227,7 @@ export async function getDeviceTelemetryHistoryAction(
 ): Promise<{ success: boolean; data?: DeviceTelemetryHistory; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(
+    const res = await backendFetch(
       `${BACKEND_URL}/api/v1/devices/${encodeURIComponent(deviceId)}/metrics?range=${range}`,
       { headers: reqHeaders, cache: "no-store" }
     );
@@ -247,7 +248,7 @@ export async function getDeviceLiveHistoryAction(
 ): Promise<{ success: boolean; data?: DeviceLiveHistory; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(
+    const res = await backendFetch(
       `${BACKEND_URL}/api/v1/devices/${encodeURIComponent(deviceId)}/live-history?limit=${limit}`,
       { headers: reqHeaders, cache: "no-store" }
     );
@@ -270,7 +271,7 @@ export async function getDeviceLiveVitalsAction(
 ): Promise<{ success: boolean; data?: DeviceLiveResult; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(
+    const res = await backendFetch(
       `${BACKEND_URL}/api/v1/devices/${encodeURIComponent(deviceId)}/live`,
       {
         headers: reqHeaders,
@@ -314,7 +315,7 @@ export async function factoryRegisterDeviceAction(
 ): Promise<{ success: boolean; data?: Device; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/devices/admin/factory-register`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/devices/admin/factory-register`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify(payload),
@@ -342,7 +343,7 @@ export async function generateDeviceRegisterTokenAction(
 ): Promise<{ success: boolean; data?: DeviceRegisterToken; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/devices/admin/device-register-tokens`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/devices/admin/device-register-tokens`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify({ device_model: deviceModel }),
@@ -372,7 +373,7 @@ export async function dispatchToVendorAction(data: {
 }): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/devices/admin/dispatch-to-vendor`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/devices/admin/dispatch-to-vendor`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify(data),
@@ -396,7 +397,7 @@ export async function getVendorInventoryAction(
   try {
     const reqHeaders = await getAdminHeaders();
     const query = vendorAccountId ? `?vendorAccountId=${encodeURIComponent(vendorAccountId)}` : "";
-    const res = await fetch(`${BACKEND_URL}/api/v1/devices/vendor-inventory${query}`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/devices/vendor-inventory${query}`, {
       headers: reqHeaders,
       cache: "no-store",
     });
@@ -420,7 +421,7 @@ export async function shipToCustomerAction(data: {
 }): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/devices/admin/ship-to-customer`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/devices/admin/ship-to-customer`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify(data),
@@ -446,7 +447,7 @@ export async function assignToCustomerAction(data: {
 }): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/devices/assign-to-customer`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/devices/assign-to-customer`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify(data),
@@ -470,7 +471,7 @@ export async function unassignDeviceAction(
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(
+    const res = await backendFetch(
       `${BACKEND_URL}/api/v1/devices/${encodeURIComponent(deviceId)}/unassign`,
       {
         method: "POST",
@@ -497,7 +498,7 @@ export async function decommissionDeviceAction(
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(
+    const res = await backendFetch(
       `${BACKEND_URL}/api/v1/devices/admin/${encodeURIComponent(deviceId)}/decommission`,
       {
         method: "POST",
@@ -524,7 +525,7 @@ export async function moveToMaintenanceAction(
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(
+    const res = await backendFetch(
       `${BACKEND_URL}/api/v1/devices/admin/${encodeURIComponent(deviceId)}/maintenance`,
       {
         method: "POST",
@@ -551,7 +552,7 @@ export async function returnToStockAction(
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(
+    const res = await backendFetch(
       `${BACKEND_URL}/api/v1/devices/admin/${encodeURIComponent(deviceId)}/return-to-stock`,
       {
         method: "POST",
@@ -577,7 +578,7 @@ export async function deleteDeviceAction(
 ): Promise<{ success: boolean; message?: string; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(
+    const res = await backendFetch(
       `${BACKEND_URL}/api/v1/devices/admin/${encodeURIComponent(deviceId)}`,
       {
         method: "DELETE",
@@ -608,8 +609,10 @@ export async function getVendorsListAction(
 }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const query = search && search.trim() ? `?search=${encodeURIComponent(search.trim())}` : "";
-    const res = await fetch(`${BACKEND_URL}/api/v1/admin/vendors${query}`, {
+    // The API defaults to 20 per page; selection popups need every vendor (500 is its max).
+    const params = new URLSearchParams({ limit: "500" });
+    if (search && search.trim()) params.set("search", search.trim());
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/admin/vendors?${params}`, {
       headers: reqHeaders,
       cache: "no-store",
     });
@@ -646,7 +649,7 @@ export async function getDeviceTunnelAction(
 ): Promise<{ success: boolean; data?: DeviceTunnelInfo; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(
+    const res = await backendFetch(
       `${BACKEND_URL}/api/v1/devices/admin/${encodeURIComponent(deviceId)}/tunnel`,
       { headers: reqHeaders, cache: "no-store", signal: AbortSignal.timeout(TUNNEL_READ_TIMEOUT_MS) }
     );
@@ -667,7 +670,7 @@ export async function createDeviceTunnelAction(
 ): Promise<{ success: boolean; data?: DeviceTunnelInfo; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(
+    const res = await backendFetch(
       `${BACKEND_URL}/api/v1/devices/admin/${encodeURIComponent(deviceId)}/tunnel`,
       { method: "POST", headers: reqHeaders, signal: AbortSignal.timeout(TUNNEL_WRITE_TIMEOUT_MS) }
     );
@@ -693,7 +696,7 @@ export async function deleteDeviceTunnelAction(
 ): Promise<{ success: boolean; data?: DeviceTunnelInfo; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(
+    const res = await backendFetch(
       `${BACKEND_URL}/api/v1/devices/admin/${encodeURIComponent(deviceId)}/tunnel`,
       { method: "DELETE", headers: reqHeaders, signal: AbortSignal.timeout(TUNNEL_WRITE_TIMEOUT_MS) }
     );
@@ -718,7 +721,7 @@ export async function fixDeviceCloudflareAction(
 ): Promise<{ success: boolean; data?: CloudflareFixResult; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(
+    const res = await backendFetch(
       `${BACKEND_URL}/api/v1/devices/admin/${encodeURIComponent(deviceId)}/cloudflare-fix`,
       {
         method: "POST",

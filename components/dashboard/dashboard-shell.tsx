@@ -27,6 +27,7 @@ import {
   Store,
   Ticket,
   Activity,
+  ChartColumn,
   CreditCard,
   Cpu,
 } from "lucide-react";
@@ -37,6 +38,7 @@ const NAV_ITEMS = [
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
       { label: "Events", href: "/dashboard/activity", icon: Activity },
+      { label: "Analytics", href: "/dashboard/analytics", icon: ChartColumn },
     ],
   },
   {
@@ -183,6 +185,7 @@ function getPageTitle(pathname: string): string {
   const titles: Record<string, string> = {
     "/dashboard": "Overview",
     "/dashboard/activity": "Audit & Activity",
+    "/dashboard/analytics": "Event Analytics",
     "/dashboard/users": "Team Management",
     "/dashboard/team": "Team Management",
     "/dashboard/devices": "Devices",

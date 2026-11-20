@@ -1,25 +1,15 @@
 "use client";
 
 import * as React from "react";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import Link from "next/link";
-import {
-  Search,
-  Store,
-  Eye,
-  Check,
-  X,
-  ExternalLink,
-} from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, Store, X } from "lucide-react";
 import type { VendorItem, VerificationStatus } from "@/lib/types";
 import { verifyVendorAction } from "@/lib/actions/vendor.actions";
-import { VendorDetailsSheet } from "@/components/dashboard/vendors/vendor-details-sheet";
+import { EmptyTableRow, PageHeader, SearchBox, StatusTabs, countBy } from "@/components/dashboard/list-page";
+import { StatTile } from "@/components/dashboard/stat-tile";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { toast } from "sonner";
 
 const STATUS_TABS: Array<{ label: string; value: string }> = [
@@ -51,8 +41,11 @@ interface VendorsPageClientProps {
 export function VendorsPageClient({ vendors }: VendorsPageClientProps) {
   const [activeTab, setActiveTab] = React.useState("ALL");
   const [search, setSearch] = React.useState("");
-  const [selectedVendorId, setSelectedVendorId] = React.useState<string | null>(null);
   const [isPending, startTransition] = React.useTransition();
+  // Approve / Reject only run after the admin confirms in a dialog.
+  const [confirm, setConfirm] = React.useState<{ vendor: VendorItem; status: VerificationStatus } | null>(null);
+  const router = useRouter();
+  const vendorHref = (v: VendorItem) => `/dashboard/vendors/${v.businessAccountId || v.id}`;
 
   // `vendors` is the real Server Component data, refreshed automatically via
   // `revalidatePath` inside `verifyVendorAction` after every mutation. The
@@ -67,12 +60,6 @@ export function VendorsPageClient({ vendors }: VendorsPageClientProps) {
           : v
       )
   );
-
-  // Deriving the selected vendor from the live list on every render means
-  // the sheet can never go stale — no manual re-sync needed after a mutation.
-  const selectedVendor = selectedVendorId
-    ? optimisticVendors.find((v) => v.businessAccountId === selectedVendorId) || null
-    : null;
 
   const filteredVendors = React.useMemo(() => {
     const term = search.toLowerCase();
@@ -91,6 +78,8 @@ export function VendorsPageClient({ vendors }: VendorsPageClientProps) {
   const totalVendors = optimisticVendors.length;
   const pendingCount = optimisticVendors.filter((v) => v.verificationStatus === "PENDING").length;
   const verifiedCount = optimisticVendors.filter((v) => v.verificationStatus === "VERIFIED").length;
+  const statusCounts = countBy(optimisticVendors, (v) => v.verificationStatus);
+  const totalStores = optimisticVendors.reduce((acc, v) => acc + (v.businessAccount._count?.managedCustomers || 0), 0);
   const totalStock = optimisticVendors.reduce(
     (acc, v) => acc + (v.businessAccount._count?.custodianDevices || 0),
     0
@@ -100,8 +89,9 @@ export function VendorsPageClient({ vendors }: VendorsPageClientProps) {
     startTransition(async () => {
       applyOptimisticVerify({ businessAccountId, status });
       const res = await verifyVendorAction(businessAccountId, status);
+      setConfirm(null);
       if (res.success) {
-        toast.success(`Vendor verification status updated to ${status}`);
+        toast.success(status === "VERIFIED" ? "Vendor approved" : "Vendor rejected");
       } else {
         toast.error(res.error || "Failed to update vendor status");
       }
@@ -110,153 +100,59 @@ export function VendorsPageClient({ vendors }: VendorsPageClientProps) {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pb-1">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight text-foreground">
-            Partner Vendors
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            CCTV distributor accounts, KYC verification audits, and consignment hardware
-          </p>
-        </div>
+      <PageHeader
+        title="Partner Vendors"
+        subtitle="Installation partners, KYC verification, and the hardware they hold"
+      />
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile
+          label="Total vendors"
+          value={String(totalVendors)}
+          info="Every installation partner registered with us, whatever their verification state."
+          footer={<span className="text-[11px] text-muted-foreground">{totalStores} customer stores managed</span>}
+        />
+        <StatTile
+          label="Pending KYC"
+          value={String(pendingCount)}
+          info="Vendors who signed up and are waiting for us to check their documents (PAN, GST, bank). They can't receive stock until approved."
+          footer={
+            pendingCount > 0 ? (
+              <span className="flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-400">
+                <AlertTriangle className="size-3" />
+                Waiting for review
+              </span>
+            ) : (
+              <span className="text-[11px] text-muted-foreground">Nothing to review</span>
+            )
+          }
+        />
+        <StatTile
+          label="Verified"
+          value={String(verifiedCount)}
+          info="Vendors whose documents we checked and approved. Only verified vendors can be sent stock and install for customers."
+          footer={<span className="text-[11px] text-muted-foreground">Active partners</span>}
+        />
+        <StatTile
+          label="Stock with vendors"
+          value={String(totalStock)}
+          info="Edge boxes currently held by vendors, sent to them for installation but not yet fitted at a customer site."
+          footer={<span className="text-[11px] text-muted-foreground">Boxes not yet installed</span>}
+        />
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-border/50 bg-card p-4 shadow-none hover:border-border transition-colors duration-100">
-          <CardContent className="p-0 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                Total Vendors
-              </span>
-              <span className="font-mono text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                registered
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="font-mono text-2xl font-bold tracking-tight text-foreground">
-                {totalVendors}
-              </span>
-              <span className="text-[11px] text-muted-foreground/70">
-                partner network
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card p-4 shadow-none hover:border-border transition-colors duration-100">
-          <CardContent className="p-0 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                Pending KYC
-              </span>
-              <span
-                className={`font-mono text-[11px] font-medium ${
-                  pendingCount > 0
-                    ? "text-amber-600 dark:text-amber-400"
-                    : "text-emerald-600 dark:text-emerald-400"
-                }`}
-              >
-                {pendingCount > 0 ? `${pendingCount} review` : "all clear"}
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="font-mono text-2xl font-bold tracking-tight text-foreground">
-                {pendingCount}
-              </span>
-              <span className="text-[11px] text-muted-foreground/70">
-                document checks
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card p-4 shadow-none hover:border-border transition-colors duration-100">
-          <CardContent className="p-0 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                Verified
-              </span>
-              <span className="font-mono text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                authorized
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="font-mono text-2xl font-bold tracking-tight text-foreground">
-                {verifiedCount}
-              </span>
-              <span className="text-[11px] text-muted-foreground/70">
-                active partners
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card p-4 shadow-none hover:border-border transition-colors duration-100">
-          <CardContent className="p-0 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                Shelf Stock
-              </span>
-              <span className="font-mono text-[11px] font-medium text-blue-600 dark:text-blue-400">
-                consignment
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="font-mono text-2xl font-bold tracking-tight text-foreground">
-                {totalStock}
-              </span>
-              <span className="text-[11px] text-muted-foreground/70">
-                field units held
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Tabs & Search */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-        <div className="flex flex-wrap items-center gap-1 p-1 bg-muted/40 rounded-md border border-border/50">
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => setActiveTab(tab.value)}
-              className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
-                activeTab === tab.value
-                  ? "bg-card text-foreground shadow-none border border-border/60"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1 sm:w-64">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              placeholder="Search by name, code, PAN..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 pr-8 text-xs h-8 border-border/50 bg-card shadow-none"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch("")}
-                className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
+      <div className="flex flex-col gap-3">
+        <StatusTabs
+          label="KYC status"
+          tabs={STATUS_TABS.map((t) => ({ ...t, count: t.value === "ALL" ? totalVendors : (statusCounts[t.value] ?? 0) }))}
+          active={activeTab}
+          onChange={setActiveTab}
+        />
+        <SearchBox value={search} onChange={setSearch} placeholder="Search by name, code, PAN or email..." />
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden border border-border/50 bg-card shadow-none">
+      <div className="overflow-hidden rounded-lg border border-border/60 bg-card">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-muted/30 border-b border-border/40 text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -273,12 +169,12 @@ export function VendorsPageClient({ vendors }: VendorsPageClientProps) {
             </thead>
             <tbody className="divide-y divide-border/40">
               {filteredVendors.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
-                    <Store className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                    <p className="font-medium text-foreground">No vendors found</p>
-                  </td>
-                </tr>
+                <EmptyTableRow
+                  colSpan={8}
+                  icon={Store}
+                  title={search || activeTab !== "ALL" ? "No matching vendors" : "No vendors yet"}
+                  hint={search || activeTab !== "ALL" ? "Try another tab or clear the search." : "Vendors appear here after they sign up."}
+                />
               ) : (
                 filteredVendors.map((vendor) => {
                   const statusConfig = kycBadgeStyles[vendor.verificationStatus] || {
@@ -296,8 +192,9 @@ export function VendorsPageClient({ vendors }: VendorsPageClientProps) {
                   return (
                     <tr
                       key={vendor.id}
-                      className="hover:bg-muted/20 transition-colors cursor-pointer"
-                      onClick={() => setSelectedVendorId(vendor.businessAccountId)}
+                      className="group cursor-pointer transition-colors hover:bg-muted/20"
+                      onClick={() => router.push(vendorHref(vendor))}
+                      onMouseEnter={() => router.prefetch(vendorHref(vendor))}
                     >
                       <td className="px-4 py-3 font-medium text-foreground">
                         {vendor.companyName}
@@ -341,7 +238,7 @@ export function VendorsPageClient({ vendors }: VendorsPageClientProps) {
                                 variant="outline"
                                 className="h-7 px-2 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 border-emerald-500/30 gap-1"
                                 disabled={isPending}
-                                onClick={() => handleVerify(vendor.businessAccountId, "VERIFIED")}
+                                onClick={() => setConfirm({ vendor, status: "VERIFIED" })}
                               >
                                 <Check className="h-3 w-3" />
                                 Approve
@@ -351,30 +248,14 @@ export function VendorsPageClient({ vendors }: VendorsPageClientProps) {
                                 variant="outline"
                                 className="h-7 px-2 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-500/10 border-rose-500/30 gap-1"
                                 disabled={isPending}
-                                onClick={() => handleVerify(vendor.businessAccountId, "REJECTED")}
+                                onClick={() => setConfirm({ vendor, status: "REJECTED" })}
                               >
                                 <X className="h-3 w-3" />
                                 Reject
                               </Button>
                             </>
                           )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 px-2 text-xs gap-1"
-                            onClick={() => setSelectedVendorId(vendor.businessAccountId)}
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                            View
-                          </Button>
-                          <Link
-                            href={`/dashboard/vendors/${vendor.businessAccountId || vendor.id}`}
-                            className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md border border-border bg-card hover:bg-muted text-xs font-medium text-foreground transition-colors shadow-xs"
-                            title="Open full page vendor profile"
-                          >
-                            <span>Full Profile</span>
-                            <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                          </Link>
+                          <ChevronRight className="size-4 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
                         </div>
                       </td>
                     </tr>
@@ -386,13 +267,21 @@ export function VendorsPageClient({ vendors }: VendorsPageClientProps) {
         </div>
       </div>
 
-      {/* Details Sheet */}
-      <VendorDetailsSheet
-        open={Boolean(selectedVendor)}
-        onOpenChange={(open) => !open && setSelectedVendorId(null)}
-        vendor={selectedVendor}
-        onVerify={handleVerify}
-        isVerifying={isPending}
+      <ConfirmModal
+        open={confirm !== null}
+        onOpenChange={(open) => !open && setConfirm(null)}
+        title={confirm?.status === "VERIFIED" ? "Approve vendor KYC" : "Reject vendor KYC"}
+        description={
+          confirm?.status === "VERIFIED"
+            ? `Approve "${confirm.vendor.companyName}"? They will be able to receive stock and install devices.`
+            : `Reject "${confirm?.vendor.companyName}"? Their KYC will be marked as rejected.`
+        }
+        confirmText={confirm?.status === "VERIFIED" ? "Approve" : "Reject"}
+        variant={confirm?.status === "VERIFIED" ? "default" : "destructive"}
+        loading={isPending}
+        onConfirm={() => {
+          if (confirm) handleVerify(confirm.vendor.businessAccountId, confirm.status);
+        }}
       />
     </div>
   );

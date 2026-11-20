@@ -1,5 +1,6 @@
 "use server";
 
+import { backendFetch } from "@/lib/backend-fetch";
 import { headers, cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { verifyAdminAccess } from "@/lib/session";
@@ -7,6 +8,7 @@ import type {
   CameraEventItem,
   CameraEventDetail,
   EventAnalyticsData,
+  EventInsights,
   EventThreatLevel,
   EventIncidentStatus,
 } from "@/lib/types";
@@ -51,7 +53,10 @@ export interface EventPaginationMeta {
   hasPrev: boolean;
 }
 
+export type EventStatusCounts = Partial<Record<EventIncidentStatus, number>>;
+
 export async function getEventsAction(params?: {
+  /** One status or a comma-separated list, e.g. "RECORDED,PROCESSING_AI". */
   status?: string;
   threatLevel?: string;
   search?: string;
@@ -59,12 +64,21 @@ export async function getEventsAction(params?: {
   limit?: number;
   startDate?: string;
   endDate?: string;
+  deviceId?: string;
+  accountId?: string;
+  label?: string;
+  /** `nextCursor` from the previous page: keyset paging (no page numbers / total). */
+  cursor?: string;
+  /** Ask for per-status counts under the same filters (tab badges). */
+  includeCounts?: boolean;
 }): Promise<{
   success: boolean;
   data?: {
     items: CameraEventItem[];
     total: number;
     pagination: EventPaginationMeta;
+    nextCursor: string | null;
+    statusCounts?: EventStatusCounts;
   };
   error?: string;
 }> {
@@ -89,9 +103,14 @@ export async function getEventsAction(params?: {
     if (params?.endDate) {
       searchParams.set("endDate", params.endDate);
     }
+    if (params?.deviceId) searchParams.set("deviceId", params.deviceId);
+    if (params?.accountId) searchParams.set("businessAccountId", params.accountId);
+    if (params?.label) searchParams.set("label", params.label);
+    if (params?.cursor) searchParams.set("cursor", params.cursor);
+    if (params?.includeCounts) searchParams.set("includeCounts", "true");
 
     const queryStr = searchParams.toString();
-    const res = await fetch(`${BACKEND_URL}/api/v1/events?${queryStr}`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/events?${queryStr}`, {
       headers: reqHeaders,
       cache: "no-store",
     });
@@ -128,12 +147,15 @@ export async function getEventsAction(params?: {
           hasPrev: page > 1,
         };
 
+    const rawPagination = json.pagination ?? json.data?.pagination;
     return {
       success: true,
       data: {
         items: items as CameraEventItem[],
         total,
         pagination,
+        nextCursor: rawPagination?.nextCursor ?? null,
+        statusCounts: json.data?.statusCounts,
       },
     };
   } catch (err: any) {
@@ -226,7 +248,7 @@ export async function getEventDetailsAction(
 ): Promise<{ success: boolean; data?: CameraEventDetail; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(
+    const res = await backendFetch(
       `${BACKEND_URL}/api/v1/events/${encodeURIComponent(eventId)}`,
       {
         headers: reqHeaders,
@@ -252,7 +274,7 @@ export async function getEventStatsAction(): Promise<{
 }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/events/admin/analytics`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/events/admin/analytics`, {
       headers: reqHeaders,
       cache: "no-store",
     });
@@ -268,6 +290,34 @@ export async function getEventStatsAction(): Promise<{
   }
 }
 
+export async function getEventInsightsAction(params: {
+  days: number;
+  deviceId?: string;
+  accountId?: string;
+  tz?: string;
+}): Promise<{ success: boolean; data?: EventInsights; error?: string }> {
+  try {
+    const reqHeaders = await getAdminHeaders();
+    const searchParams = new URLSearchParams({ days: String(params.days), tz: params.tz || "Asia/Kolkata" });
+    if (params.deviceId) searchParams.set("deviceId", params.deviceId);
+    if (params.accountId) searchParams.set("accountId", params.accountId);
+
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/events/admin/insights?${searchParams}`, {
+      headers: reqHeaders,
+      cache: "no-store",
+    });
+
+    const json = await res.json();
+    if (!res.ok) {
+      return { success: false, error: json?.message || "Failed to fetch event insights" };
+    }
+
+    return { success: true, data: json.data as EventInsights };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Network error fetching event insights" };
+  }
+}
+
 export async function reviewEventAction(
   eventId: string,
   data: {
@@ -278,7 +328,7 @@ export async function reviewEventAction(
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(
+    const res = await backendFetch(
       `${BACKEND_URL}/api/v1/events/${encodeURIComponent(eventId)}/review`,
       {
         method: "PATCH",

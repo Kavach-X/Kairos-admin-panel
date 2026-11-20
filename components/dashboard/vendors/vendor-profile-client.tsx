@@ -399,7 +399,7 @@ export function VendorProfileClient({ initial }: { initial: VendorProfileInitial
 
       {/* Tab 2: Shelf Custody Stock */}
       {activeTab === "custody" && (
-        <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-xs">
+        <div className="overflow-hidden rounded-lg border border-border/60 bg-card">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-muted/30 border-b border-border/50 text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -445,7 +445,7 @@ export function VendorProfileClient({ initial }: { initial: VendorProfileInitial
 
       {/* Tab 3: Installed Field Devices */}
       {activeTab === "installed" && (
-        <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-xs">
+        <div className="overflow-hidden rounded-lg border border-border/60 bg-card">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-muted/30 border-b border-border/50 text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -505,7 +505,7 @@ export function VendorProfileClient({ initial }: { initial: VendorProfileInitial
 
       {/* Tab 4: Managed Customers */}
       {activeTab === "customers" && (
-        <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-xs">
+        <div className="overflow-hidden rounded-lg border border-border/60 bg-card">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-muted/30 border-b border-border/50 text-[11px] uppercase tracking-wider text-muted-foreground">

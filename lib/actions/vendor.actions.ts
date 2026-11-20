@@ -1,5 +1,6 @@
 "use server";
 
+import { backendFetch } from "@/lib/backend-fetch";
 import { cache } from "react";
 import { headers, cookies } from "next/headers";
 import { revalidatePath, updateTag } from "next/cache";
@@ -44,10 +45,12 @@ export const getVendorsAction = cache(async function getVendorsAction(
   try {
     const reqHeaders = await getAdminHeaders();
     const params = new URLSearchParams();
+    // Admin lists filter in the browser, so fetch the whole list (the API defaults to 20 per page; 500 is its max).
+    params.set("limit", "500");
     if (status && status !== "ALL") params.set("status", status);
     if (search && search.trim()) params.set("search", search.trim());
     const query = params.toString() ? `?${params.toString()}` : "";
-    const res = await fetch(`${BACKEND_URL}/api/v1/admin/vendors${query}`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/admin/vendors${query}`, {
       headers: reqHeaders,
       cache: "no-store",
     });
@@ -69,7 +72,7 @@ export async function verifyVendorAction(
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(
+    const res = await backendFetch(
       `${BACKEND_URL}/api/v1/admin/vendors/${encodeURIComponent(businessAccountId)}/verify`,
       {
         method: "PATCH",
@@ -96,7 +99,7 @@ export async function getVendorDetailsAction(
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/admin/vendors/${encodeURIComponent(id)}`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/admin/vendors/${encodeURIComponent(id)}`, {
       headers: reqHeaders,
       cache: "no-store",
     });

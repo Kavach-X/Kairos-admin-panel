@@ -1,5 +1,6 @@
 "use server";
 
+import { backendFetch } from "@/lib/backend-fetch";
 import { headers, cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { verifyAdminAccess } from "@/lib/session";
@@ -44,12 +45,14 @@ export async function getTicketsAction(params?: {
   try {
     const reqHeaders = await getAdminHeaders();
     const searchParams = new URLSearchParams();
+    // Admin lists filter in the browser, so fetch the whole list (the API defaults to 20 per page; 500 is its max).
+    searchParams.set("limit", "500");
     if (params?.status && params.status !== "ALL") searchParams.set("status", params.status);
     if (params?.priority && params.priority !== "ALL") searchParams.set("priority", params.priority);
     if (params?.search && params.search.trim()) searchParams.set("search", params.search.trim());
 
     const queryStr = searchParams.toString();
-    const res = await fetch(`${BACKEND_URL}/api/v1/tickets${queryStr ? `?${queryStr}` : ""}`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/tickets${queryStr ? `?${queryStr}` : ""}`, {
       headers: reqHeaders,
       cache: "no-store",
     });
@@ -77,7 +80,7 @@ export async function createTicketAction(data: {
 }): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/tickets`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/tickets`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify(data),
@@ -107,7 +110,7 @@ export async function updateTicketAction(
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/tickets/${encodeURIComponent(ticketId)}`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/tickets/${encodeURIComponent(ticketId)}`, {
       method: "PATCH",
       headers: reqHeaders,
       body: JSON.stringify(data),
@@ -134,7 +137,7 @@ export async function rmaReplaceDeviceAction(data: {
 }): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/devices/replace`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/devices/replace`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify(data),

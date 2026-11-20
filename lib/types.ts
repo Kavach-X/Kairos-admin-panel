@@ -670,3 +670,48 @@ export type CloudflareFixResult =
       cloudflared_active: boolean | null;
       error: string | null;
     };
+// ─── Event insights (GET /events/admin/insights) ─────────────
+
+export interface EventOutcomeCounts {
+  total: number;
+  confirmed: number;
+  falseAlarm: number;
+  dismissed: number;
+  pending: number;
+}
+
+export interface EventInsights {
+  range: { from: string; to: string; tz: string };
+  totals: EventOutcomeCounts;
+  previousTotals: EventOutcomeCounts;
+  daily: Array<EventOutcomeCounts & { date: string }>;
+  labels: Array<EventOutcomeCounts & { label: string }>;
+  threatLevels: Array<{ level: EventThreatLevel; count: number }>;
+  devices: Array<{
+    deviceId: string;
+    accountName: string | null;
+    total: number;
+    confirmed: number;
+    falseAlarm: number;
+    dismissed: number;
+  }>;
+  /** ISO day of week (1 = Monday) × local hour. Cells with no events are omitted. */
+  heatmap: Array<{ dow: number; hour: number; count: number }>;
+  falseAlarmReasons: Array<{ reason: string; count: number }>;
+  pipeline: {
+    analyzed: number;
+    failedThumbnails: number;
+    failedVideos: number;
+    stuckThumbnails: number;
+    stuckVideos: number;
+    aiLatencyP50Sec: number | null;
+    aiLatencyP95Sec: number | null;
+  };
+  review: { reviewed: number; aiMissedThreat: number; aiFalseAlarm: number };
+  alerts: { dispatched: number; dispatchP50Sec: number | null };
+}
+
+export interface AnalyticsFilterOptions {
+  devices: Array<{ deviceId: string; accountId: string | null; accountName: string | null }>;
+  customers: Array<{ id: string; name: string }>;
+}

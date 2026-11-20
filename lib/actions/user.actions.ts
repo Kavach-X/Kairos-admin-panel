@@ -1,8 +1,9 @@
 "use server";
 
+import { backendFetch } from "@/lib/backend-fetch";
 import { headers, cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { verifyAdminAccess, getServerSession } from "@/lib/session";
+import { verifyAdminAccess, getServerSession, invalidateAdminAccessCache } from "@/lib/session";
 import type { AdminUserItem } from "@/lib/types";
 
 const BACKEND_URL =
@@ -45,7 +46,7 @@ export async function getUsersAction(): Promise<{
 }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/admin/users`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/admin/users`, {
       headers: reqHeaders,
       cache: "no-store",
     });
@@ -69,7 +70,7 @@ export async function createAdminUserAction(data: {
 }): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/admin/users`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/admin/users`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify(data),
@@ -92,7 +93,7 @@ export async function deleteUserAction(
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/admin/users/${encodeURIComponent(userId)}`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/admin/users/${encodeURIComponent(userId)}`, {
       method: "DELETE",
       headers: reqHeaders,
     });
@@ -125,7 +126,7 @@ export async function getMeAction(): Promise<{
     };
 
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/users/me`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/users/me`, {
       headers: reqHeaders,
       cache: "no-store",
     });
@@ -190,7 +191,7 @@ export async function updateMeAction(data: {
 }): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/users/me`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/users/me`, {
       method: "PATCH",
       headers: reqHeaders,
       body: JSON.stringify(data),
@@ -201,6 +202,7 @@ export async function updateMeAction(data: {
       return { success: false, error: json?.message || "Failed to update profile" };
     }
 
+    await invalidateAdminAccessCache();
     revalidatePath("/dashboard/account");
     return { success: true, data: json.data };
   } catch (err: any) {
@@ -215,7 +217,7 @@ export async function sendEmailOtpAction(email: string): Promise<{
 }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/users/me/email/send-otp`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/users/me/email/send-otp`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify({ email }),
@@ -237,7 +239,7 @@ export async function verifyEmailOtpAction(
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/users/me/email/verify-otp`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/users/me/email/verify-otp`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify({ email, otp }),
@@ -248,6 +250,7 @@ export async function verifyEmailOtpAction(
       return { success: false, error: json?.message || "Failed to verify email OTP" };
     }
 
+    await invalidateAdminAccessCache();
     revalidatePath("/dashboard/account");
     return { success: true, data: json.data };
   } catch (err: any) {
@@ -262,7 +265,7 @@ export async function sendPhoneOtpAction(phoneNumber: string): Promise<{
 }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/users/me/phone/send-otp`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/users/me/phone/send-otp`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify({ phoneNumber }),
@@ -284,7 +287,7 @@ export async function verifyPhoneOtpAction(
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/users/me/phone/verify-otp`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/users/me/phone/verify-otp`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify({ phoneNumber, otp }),
@@ -295,6 +298,7 @@ export async function verifyPhoneOtpAction(
       return { success: false, error: json?.message || "Failed to verify phone OTP" };
     }
 
+    await invalidateAdminAccessCache();
     revalidatePath("/dashboard/account");
     return { success: true, data: json.data };
   } catch (err: any) {
@@ -309,7 +313,7 @@ export async function createAvatarUploadUrlAction(contentType: string): Promise<
 }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/users/me/avatar/upload-url`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/users/me/avatar/upload-url`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify({ contentType }),
@@ -332,7 +336,7 @@ export async function saveAvatarAction(key: string): Promise<{
 }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/users/me/avatar`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/users/me/avatar`, {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify({ key }),
@@ -343,6 +347,7 @@ export async function saveAvatarAction(key: string): Promise<{
       return { success: false, error: json?.message || "Failed to save profile picture" };
     }
 
+    await invalidateAdminAccessCache();
     revalidatePath("/dashboard/account");
     return { success: true, data: json.data };
   } catch (err: any) {

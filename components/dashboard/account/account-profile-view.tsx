@@ -333,7 +333,7 @@ export function AccountProfileView({ initialUser }: AccountProfileViewProps) {
       </div>
 
       {/* Flat Unified Settings Container */}
-      <div className="overflow-hidden border border-border/50 bg-card shadow-none divide-y divide-border/40">
+      <div className="overflow-hidden rounded-lg border border-border/60 bg-card shadow-none divide-y divide-border/40">
         
         {/* ROW 1: Profile Photo */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-5 items-start">

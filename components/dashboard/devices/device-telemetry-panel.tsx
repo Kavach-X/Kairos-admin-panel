@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { Activity, Download, Radio, RefreshCw, WifiOff } from "lucide-react";
+import { Download, Radio, RefreshCw, WifiOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,10 +11,10 @@ import {
   getDeviceTelemetryHistoryAction,
 } from "@/lib/actions/device.actions";
 import { EventsCard } from "./events-card";
-import { CARD, SectionTitle, SubTitle } from "./section";
+import { CARD, SubTitle } from "./section";
 import { DetectionTimeline, type DetectionTimelineData } from "./detection-timeline";
 import { AvailabilityStrip } from "./availability-strip";
-import { DetectionCard, type DetectionInfo } from "./detection-card";
+import { PIPELINE_STATE } from "./detection-card";
 import { StatusDot } from "./status-dot";
 import { toast } from "sonner";
 import { VitalTiles, VitalTilesSkeleton, type Vital } from "./vital-tiles";
@@ -51,10 +51,16 @@ import type {
 // recharts is heavy and only needed once history has loaded, so keep it out of the page bundle.
 const MetricCard = dynamic(() => import("./metric-card").then((m) => m.MetricCard), {
   ssr: false,
-  loading: () => <div className="h-72 animate-pulse rounded-xl bg-muted/40" />,
+  loading: () => <div className="h-72 animate-pulse rounded-lg bg-muted/40" />,
 });
 
 const NO_POINTS: DeviceTelemetryPoint[] = [];
+
+export interface PanelCamera {
+  id: string;
+  name: string;
+  channelNumber: number | null;
+}
 const RANGES: TelemetryRange[] = ["24h", "7d", "30d"];
 
 function formatUptime(seconds: number | null) {
@@ -103,8 +109,11 @@ export function DeviceTelemetryPanel({
   online,
   lastSeenAt,
   inventoryStatus,
+  cameras: deviceCameras = [],
 }: {
   deviceId: string;
+  /** The device's cameras, so health reports can show names instead of ids. */
+  cameras?: PanelCamera[];
   /** Presence state from the device record, used until a live check says otherwise. */
   online: boolean;
   lastSeenAt: string | null;
@@ -176,28 +185,31 @@ export function DeviceTelemetryPanel({
     };
   }, [deviceId, refreshKey]);
 
-  const checkLive = async () => {
-    setLiveLoading(true);
-    setLiveError(null);
-    const res = await getDeviceLiveVitalsAction(deviceId);
-    if (res.success && res.data) {
-      setLive(res.data);
-      refreshNow();
-      setSharedLastSeen(deviceId, res.data.status === "LIVE" ? res.data.recorded_at : res.data.last_seen_at);
-      if (res.data.status === "LIVE") {
-        setRefreshKey((k) => k + 1);
-        toast.success("Live data updated", { duration: 2000 });
-      } else if (res.data.status === "OFFLINE") {
-        toast.error("Device is offline", { icon: <WifiOff className="size-4" /> });
+  // One live check per click: asks the device for its readings right now.
+  const checkLive = React.useCallback(
+    async () => {
+      setLiveLoading(true);
+      setLiveError(null);
+      const res = await getDeviceLiveVitalsAction(deviceId);
+      if (res.success && res.data) {
+        setLive(res.data);
+        refreshNow();
+        setSharedLastSeen(deviceId, res.data.status === "LIVE" ? res.data.recorded_at : res.data.last_seen_at);
+        if (res.data.status === "LIVE") {
+          setRefreshKey((k) => k + 1);
+          toast.success("Live data updated", { duration: 2000 });
+        } else {
+          if (res.data.status === "OFFLINE") toast.error("Device is offline", { icon: <WifiOff className="size-4" /> });
+          else toast.warning("Device did not respond");
+        }
       } else {
-        toast.warning("Device did not respond");
+        setLiveError(res.error || "Failed to fetch live data");
+        toast.error(res.error || "Failed to fetch live data");
       }
-    } else {
-      setLiveError(res.error || "Failed to fetch live data");
-      toast.error(res.error || "Failed to fetch live data");
-    }
-    setLiveLoading(false);
-  };
+      setLiveLoading(false);
+    },
+    [deviceId]
+  );
 
   // The selected hourly rows: the last N hours that have data.
   const history = React.useMemo(
@@ -548,12 +560,18 @@ export function DeviceTelemetryPanel({
   const pipelineRaw = vitals?.pipeline_status ?? model?.latestPipeline ?? latestCheck?.pipeline_status ?? null;
   const pipeline = isPipeline(pipelineRaw) ? pipelineRaw : null;
   const storedCameras = latestCheck?.camera_health ? Object.entries(latestCheck.camera_health) : null;
-  const detection: DetectionInfo = {
-    pipeline,
-    cameras: liveOk ? cameraHealth : storedCameras,
-    npuState,
-    source: reportedAt !== null ? <>Last checked <Ago at={reportedAt} /></> : pipeline ? "From the latest hourly report" : null,
+  const reach = new Map(liveOk ? cameraHealth : storedCameras ?? []);
+  const cameraName = (id: string) => {
+    const cam = deviceCameras.find((c) => c.id === id);
+    return cam ? cam.name : `Camera ${id.slice(0, 8)}`;
   };
+  // Every configured camera, plus any the device reports that the cloud doesn't know about.
+  const cameraRows = [
+    ...deviceCameras.map((c) => ({ id: c.id, name: c.name, channel: c.channelNumber, ok: reach.has(c.id) ? reach.get(c.id) === true : null })),
+    ...[...reach.keys()]
+      .filter((id) => !deviceCameras.some((c) => c.id === id))
+      .map((id) => ({ id, name: cameraName(id), channel: null, ok: reach.get(id) === true })),
+  ];
 
   // --- Verdict: latest live result + thresholds over the visible range ---
   const liveCurrent: Record<string, number | null> = {
@@ -572,7 +590,7 @@ export function DeviceTelemetryPanel({
     online: statusOnline,
     live,
     pipelineStatus: pipelineForVerdict,
-    unreachableCameras: liveOk ? cameraHealth.filter(([, ok]) => ok !== true).map(([id]) => id) : [],
+    unreachableCameras: liveOk ? cameraHealth.filter(([, ok]) => ok !== true).map(([id]) => cameraName(id)) : [],
     metrics: (model?.healthMetrics ?? []).map((m) => ({ ...m, current: liveCurrent[m.id] ?? m.current })),
   });
   const healthTop = healthReasons[0] ?? null;
@@ -671,78 +689,128 @@ export function DeviceTelemetryPanel({
     if (!kpiFirmware) stateItems.push({ label: "Firmware", value: bar });
   }
 
+  const facts: { label: string; value: React.ReactNode }[] = [
+    ...stateItems,
+    { label: "Detection", value: pipeline ? PIPELINE_STATE[pipeline].title : showSkeleton ? <span className="inline-block h-4 w-14 animate-pulse rounded bg-muted/50 align-middle" /> : "Not reported" },
+    ...(npuState ? [{ label: "AI chip", value: npuState.toLowerCase() === "running" ? "On and ready" : npuState }] : []),
+  ];
+  const freshness: React.ReactNode = liveOk ? (
+    <>
+      Live reading, updated <Ago at={live.recorded_at} />
+    </>
+  ) : reportedAt !== null ? (
+    <>
+      From the device&apos;s last report, <Ago at={reportedAt} />
+    </>
+  ) : (
+    "No reports from this device yet"
+  );
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-2">
-        <SectionTitle icon={Activity}>Health Telemetry</SectionTitle>
-        <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={checkLive} disabled={liveLoading}>
-          {liveLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Radio className="h-3.5 w-3.5" />}
-          {liveLoading ? "Checking device..." : live ? "Refresh Live Data" : "Check Live Data"}
-        </Button>
-      </div>
-
-      {/* 1-2-4: verdict, device state, reporting timeline, detection */}
-      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_17rem]">
-        <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
-          {verdictReady ? (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-              <Badge variant={verdict.variant}>{verdict.label}</Badge>
-              <span className="text-sm text-muted-foreground">{verdictReason}</span>
-            </div>
-          ) : (
-            <div className="h-6 w-2/3 animate-pulse rounded-full bg-muted/50" />
-          )}
-
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-            {stateItems.map((i) => (
-              <div key={i.label} className="flex flex-col gap-0.5">
-                <dt className="text-[11px] text-muted-foreground">{i.label}</dt>
-                <dd className="text-sm text-foreground">{i.value}</dd>
+    <div className="flex flex-col gap-5">
+      {/* Status: verdict, every reason, key facts, cameras, data coverage */}
+      <div className={`${CARD} relative flex flex-col gap-4 overflow-hidden`}>
+        {liveLoading && <div className="absolute inset-x-0 top-0 h-0.5 animate-pulse bg-primary/60" aria-hidden />}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            {verdictReady ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={verdict.variant}>{verdict.label}</Badge>
+                <span className="text-sm text-foreground">
+                  {!statusOnline
+                    ? verdictReason
+                    : healthReasons.length > 1
+                      ? `${healthReasons.length} things need a look`
+                      : healthTop
+                        ? healthTop.text
+                        : hasAnyReading
+                          ? `All readings normal${waitingForCamera ? ", waiting for a camera" : ""}`
+                          : "No readings recorded yet"}
+                </span>
               </div>
-            ))}
-          </dl>
-
-          {showSkeleton ? (
-            <div className="flex flex-col gap-1.5">
-              <div className="h-3 animate-pulse rounded-full bg-muted/50" />
-              <div className="h-4 w-1/2 animate-pulse rounded bg-muted/40" />
-            </div>
-          ) : (
-            model && model.stripCells.length > 0 && <AvailabilityStrip cells={model.stripCells} coverage={coverage} rangeLabel={range} />
-          )}
-        </div>
-        <DetectionCard info={detection} loading={showSkeleton} />
-      </div>
-
-      {/* Live check (on demand) */}
-      {liveError && (
-        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-600 dark:text-rose-400">
-          {liveError}
-        </div>
-      )}
-      {live?.status === "NO_RESPONSE" && (
-        <div className={`${CARD} flex items-center justify-between gap-2 py-3 text-sm`}>
-          <span className="flex flex-wrap items-center gap-x-2">
-            <StatusDot status="warn" />
-            <span className="font-medium text-foreground">Device is online but did not respond</span>
-            <span className="text-muted-foreground">
-              · {lastSeenIso ? <>last seen <Ago at={lastSeenIso} /></> : "never seen"}
-            </span>
-          </span>
-          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={checkLive} disabled={liveLoading}>
-            Retry
+            ) : (
+              <div className="h-6 w-64 max-w-full animate-pulse rounded-full bg-muted/50" />
+            )}
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              {liveOk && <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden />}
+              {freshness}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => void checkLive()} disabled={liveLoading || !statusOnline}>
+            {liveLoading ? <RefreshCw className="size-3.5 animate-spin" /> : <Radio className="size-3.5" />}
+            {liveLoading ? "Checking..." : liveOk ? "Check again" : "Check live data"}
           </Button>
         </div>
-      )}
+
+        {statusOnline && healthReasons.length > 1 && (
+          <ul className="grid gap-1.5 rounded-md border border-border/50 bg-muted/20 p-3 text-xs sm:grid-cols-2">
+            {healthReasons.map((r) => (
+              <li key={r.text} className="flex items-start gap-2">
+                <StatusDot status={r.severity} className="mt-1" />
+                <span className="text-foreground">{r.text}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {liveError && <p className="text-xs text-rose-600 dark:text-rose-400">{liveError}</p>}
+        {live?.status === "NO_RESPONSE" && (
+          <p className="flex items-center gap-2 text-xs text-foreground">
+            <StatusDot status="warn" />
+            The device is connected but did not answer the live check.
+            <button type="button" className="font-medium text-primary hover:underline" onClick={() => void checkLive()}>
+              Try again
+            </button>
+          </p>
+        )}
+
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
+          {facts.map((i) => (
+            <div key={i.label} className="flex min-w-0 flex-col gap-0.5">
+              <dt className="text-[11px] text-muted-foreground">{i.label}</dt>
+              <dd className="truncate text-sm text-foreground">{i.value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        {cameraRows.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] text-muted-foreground">Cameras</span>
+            <ul className="flex flex-wrap gap-1.5">
+              {cameraRows.map((c) => (
+                <li
+                  key={c.id}
+                  title={c.ok === null ? "Not reported in the last check" : c.ok ? "Reachable" : "Can't be reached"}
+                  className="flex items-center gap-1.5 rounded-md border border-border/60 px-2 py-1 text-xs"
+                >
+                  <span className={`size-1.5 rounded-full ${c.ok === null ? "bg-zinc-300 dark:bg-zinc-600" : c.ok ? "bg-emerald-500" : "bg-rose-500"}`} />
+                  <span className="text-foreground">{c.name}</span>
+                  {c.channel !== null && <span className="font-mono text-[10px] text-muted-foreground">CH {c.channel}</span>}
+                  {c.ok === false && <span className="text-rose-600 dark:text-rose-400">unreachable</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {showSkeleton ? (
+          <div className="flex flex-col gap-1.5">
+            <div className="h-3 animate-pulse rounded-full bg-muted/50" />
+            <div className="h-4 w-1/2 animate-pulse rounded bg-muted/40" />
+          </div>
+        ) : (
+          model && model.stripCells.length > 0 && <AvailabilityStrip cells={model.stripCells} coverage={coverage} rangeLabel={range} />
+        )}
+      </div>
 
       {(vitalTiles.length > 0 || showSkeleton) && (
         <section className="flex flex-col gap-3">
           <SubTitle
             right={
               vitalTiles.length > 0 && (
-              <span className="text-xs">
-                <SourceTag badge live={live?.status === "LIVE"} at={live?.status === "LIVE" ? live.recorded_at : Number.isFinite(storedNewest) ? storedNewest : null} />
-              </span>
+                <span className="text-xs">
+                  <SourceTag badge live={liveOk} at={liveOk ? live.recorded_at : Number.isFinite(storedNewest) ? storedNewest : null} />
+                </span>
               )
             }
           >
@@ -801,7 +869,7 @@ export function DeviceTelemetryPanel({
             {[true, false, false, false, false, true].map((wide, i) => (
               <div
                 key={i}
-                className={`h-[316px] animate-pulse rounded-xl border border-border bg-muted/30 ${wide ? "lg:col-span-2" : ""}`}
+                className={`h-[316px] animate-pulse rounded-lg border border-border/60 bg-muted/30 ${wide ? "lg:col-span-2" : ""}`}
               />
             ))}
           </div>

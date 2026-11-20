@@ -1,5 +1,6 @@
 "use server";
 
+import { backendFetch } from "@/lib/backend-fetch";
 import { cache } from "react";
 import { headers, cookies } from "next/headers";
 import { verifyAdminAccess } from "@/lib/session";
@@ -77,7 +78,7 @@ export const getDashboardStatsAction = cache(async function getDashboardStatsAct
 }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/admin/dashboard/stats`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/admin/dashboard/stats`, {
       headers: reqHeaders,
       cache: "no-store",
     });

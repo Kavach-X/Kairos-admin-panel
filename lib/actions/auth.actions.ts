@@ -1,5 +1,7 @@
 "use server";
 
+import { backendFetch } from "@/lib/backend-fetch";
+import { invalidateAdminAccessCache } from "@/lib/session";
 import { z } from "zod/v4";
 import { cookies, headers } from "next/headers";
 
@@ -38,7 +40,7 @@ export async function sendLoginOtp(
   }
 
   try {
-    const res = await fetch(`${BACKEND_URL}/api/auth/email-otp/send-verification-otp`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/auth/email-otp/send-verification-otp`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -78,7 +80,7 @@ export async function sendPhoneLoginOtp(
   }
 
   try {
-    const res = await fetch(`${BACKEND_URL}/api/auth/phone-number/send-otp`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/auth/phone-number/send-otp`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -136,7 +138,7 @@ export async function verifyAdminRole(
   }
 
   try {
-    const meRes = await fetch(
+    const meRes = await backendFetch(
       `${BACKEND_URL}/api/v1/portal/me?portal=ADMIN`,
       {
         headers: reqHeaders,
@@ -195,6 +197,7 @@ export async function verifyAdminRole(
 // ─── Sign Out Server Action ──────────────────────────────────
 
 export async function signOutAdmin(): Promise<void> {
+  await invalidateAdminAccessCache();
   const cookieStore = await cookies();
   try {
     cookieStore.delete("better-auth.session_token");

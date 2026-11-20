@@ -70,12 +70,12 @@ function SignalBars({ bars, color }: { bars: number; color: string }) {
 
 function Tile({ v }: { v: Vital }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1.5 rounded-xl border border-border bg-card p-3">
+    <div className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-border/60 bg-card p-3">
       <div className="flex items-center justify-between">
         <span className="truncate text-xs font-medium text-muted-foreground">{v.label}</span>
         <StatusDot status={v.status} />
       </div>
-      <span className="font-mono text-xl font-semibold leading-none text-foreground">
+      <span key={v.display} className="font-mono text-xl font-semibold leading-none text-foreground animate-in fade-in duration-700 motion-reduce:animate-none">
         {v.display}
         <span className="ml-0.5 text-xs font-normal text-muted-foreground">{v.unit}</span>
       </span>
@@ -95,12 +95,12 @@ export function VitalTiles({
   busy,
 }: {
   vitals: Vital[];
-  /** A live check is in flight: the current values are dimmed and pulse. */
+  /** A live check is in flight. Values stay readable; each number fades in when it changes. */
   busy: boolean;
 }) {
   if (vitals.length === 0) return null;
   return (
-    <div className={`grid grid-cols-2 gap-3 transition-opacity sm:grid-cols-3 xl:grid-cols-6 ${busy ? "animate-pulse opacity-60" : ""}`}>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6" aria-busy={busy}>
       {vitals.map((v) => (
         <Tile key={v.id} v={v} />
       ))}
@@ -113,7 +113,7 @@ export function VitalTilesSkeleton() {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
       {Array.from({ length: 6 }, (_, i) => (
-        <div key={i} className="h-[112px] animate-pulse rounded-xl border border-border bg-muted/30" />
+        <div key={i} className="h-[112px] animate-pulse rounded-lg border border-border/60 bg-muted/30" />
       ))}
     </div>
   );

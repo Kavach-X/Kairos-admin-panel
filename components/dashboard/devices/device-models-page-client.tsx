@@ -1,252 +1,129 @@
 "use client";
 
 import * as React from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Cpu,
-  Plus,
-  Search,
-  HardDrive,
-  Layers,
-  Video,
-  X,
-} from "lucide-react";
+import { Cpu, Pencil, Plus } from "lucide-react";
+import { EmptyTableRow, PageHeader, SearchBox } from "@/components/dashboard/list-page";
+import { SURFACE, TH, THEAD } from "@/components/dashboard/detail-header";
 import type { DeviceModel } from "@/lib/types";
 import { getDeviceModelsAction } from "@/lib/actions/device.actions";
 import { CreateModelModal } from "@/components/dashboard/devices/create-model-modal";
+import { readModelSpecs } from "./model-specs";
+
+const dash = <span className="text-muted-foreground/60">—</span>;
 
 export function DeviceModelsPageClient({ initialModels }: { initialModels: DeviceModel[] }) {
   const [models, setModels] = React.useState<DeviceModel[]>(initialModels);
-  const [loading, setLoading] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
+  const [editing, setEditing] = React.useState<DeviceModel | null>(null);
 
   const fetchModels = React.useCallback(async () => {
-    setLoading(true);
     const res = await getDeviceModelsAction();
-    if (res.success && res.data) {
-      setModels(res.data);
-    }
-    setLoading(false);
+    if (res.success && res.data) setModels(res.data);
   }, []);
 
-  const filteredModels = models.filter((m) => {
-    const term = search.toLowerCase();
-    return (
-      m.name.toLowerCase().includes(term) ||
-      m.code.toLowerCase().includes(term) ||
-      (m.description && m.description.toLowerCase().includes(term))
-    );
-  });
-
-  const totalModels = models.length;
-  const totalDevicesCount = models.reduce((acc, m) => acc + (m._count?.devices || 0), 0);
+  const term = search.toLowerCase();
+  const filtered = models.filter(
+    (m) => m.name.toLowerCase().includes(term) || m.code.toLowerCase().includes(term) || (m.description ?? "").toLowerCase().includes(term)
+  );
+  const totalDevices = models.reduce((acc, m) => acc + (m._count?.devices || 0), 0);
+  const retired = models.filter((m) => !m.is_active).length;
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pb-1">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight text-foreground">
-            Hardware Models
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            Device hardware profiles, chipset configurations, and camera channel capacity
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            onClick={() => setIsCreateOpen(true)}
-            className="h-8 text-xs font-normal gap-1.5"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add Model
-          </Button>
-        </div>
-      </div>
-
-      {/* KPI Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Card className="border-border/50 bg-card p-4 shadow-none hover:border-border transition-colors duration-100">
-          <CardContent className="p-0 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                Total Models
-              </span>
-              <span className="font-mono text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                catalog
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              {loading ? (
-                <Skeleton className="h-7 w-14" />
-              ) : (
-                <span className="font-mono text-2xl font-bold tracking-tight text-foreground">
-                  {totalModels}
-                </span>
-              )}
-              <span className="text-[11px] text-muted-foreground/70">
-                hardware series
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card p-4 shadow-none hover:border-border transition-colors duration-100">
-          <CardContent className="p-0 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                Active Devices
-              </span>
-              <span className="font-mono text-[11px] font-medium text-blue-600 dark:text-blue-400">
-                fleet
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              {loading ? (
-                <Skeleton className="h-7 w-14" />
-              ) : (
-                <span className="font-mono text-2xl font-bold tracking-tight text-foreground">
-                  {totalDevicesCount}
-                </span>
-              )}
-              <span className="text-[11px] text-muted-foreground/70">
-                hardware units registered
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Search Bar */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-          <Input
-            placeholder="Search models..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 pr-8 text-xs h-8 border-border/50 bg-card shadow-none"
-          />
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Models Grid */}
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="h-44 animate-pulse bg-muted/40 border-border/40 shadow-none" />
-          ))}
-        </div>
-      ) : filteredModels.length === 0 ? (
-        <Card className="p-12 text-center border-dashed border-border/60 bg-muted/20 shadow-none">
-          <Cpu className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-40" />
-          <h3 className="text-sm font-semibold text-foreground">No Models Found</h3>
-          <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
-            {search ? "No models match your search." : "Add your first device model to get started."}
-          </p>
-          {!search && (
-            <Button
-              size="sm"
-              onClick={() => setIsCreateOpen(true)}
-              className="mt-4 text-xs font-normal gap-1"
-            >
-              <Plus className="h-3 w-3" />
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title="Hardware Models"
+        subtitle={`${models.length} ${models.length === 1 ? "model" : "models"}${retired ? ` (${retired} retired)` : ""} · ${totalDevices} devices registered`}
+        actions={
+          <>
+            {models.length > 5 && <SearchBox value={search} onChange={setSearch} placeholder="Search models..." className="w-56" />}
+            <Button size="sm" onClick={() => setIsCreateOpen(true)} className="h-8 gap-1.5 text-xs font-normal">
+              <Plus className="h-3.5 w-3.5" />
               Add Model
             </Button>
-          )}
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {filteredModels.map((model) => {
-            const specs = model.specs || {};
-            return (
-              <Card
-                key={model.id}
-                className="overflow-hidden border-border/50 bg-card shadow-none hover:border-border transition-colors flex flex-col justify-between"
-              >
-                <CardHeader className="p-4 pb-3 border-b border-border/40 bg-muted/20">
-                  <div>
-                    <CardTitle className="text-sm font-semibold text-foreground">
-                      {model.name}
-                    </CardTitle>
-                    <span className="font-mono text-[11px] text-muted-foreground tracking-wider block mt-0.5">
-                      {model.code}
-                    </span>
-                  </div>
-                  {model.description && (
-                    <p className="text-xs text-muted-foreground mt-2 line-clamp-2 leading-relaxed">
-                      {model.description}
-                    </p>
-                  )}
-                </CardHeader>
-
-                <CardContent className="p-4 flex flex-col gap-3 text-xs">
-                  {/* Specs Grid */}
-                  <div className="grid grid-cols-2 gap-2 bg-muted/40 p-2.5 rounded-lg border border-border/50 text-[11px]">
-                    <div>
-                      <span className="text-muted-foreground text-[10px] block">Processor</span>
-                      <span className="font-semibold text-foreground truncate block">
-                        {specs.soc || "ARM64"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground text-[10px] block">Max Cameras</span>
-                      <span className="font-semibold text-foreground flex items-center gap-1">
-                        <Video className="h-3 w-3 text-primary" />
-                        {specs.maxStreams || 4} feeds
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground text-[10px] block">RAM / Storage</span>
-                      <span className="font-semibold text-foreground">
-                        {specs.ramGb || 4}GB / {specs.storageGb || 32}GB
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground text-[10px] block">AI TOPS</span>
-                      <span className="font-semibold text-foreground">
-                        {specs.npuTops ? `${specs.npuTops} TOPS` : "Standard"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1">
-                    <span>Devices Using This Model:</span>
-                    <strong className="text-foreground">{model._count?.devices || 0}</strong>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Add Model Modal */}
-      <CreateModelModal
-        open={isCreateOpen}
-        onOpenChange={setIsCreateOpen}
-        onSuccess={fetchModels}
+          </>
+        }
       />
+
+      <div className={`${SURFACE} overflow-hidden`}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className={THEAD}>
+              <tr>
+                <th className={TH}>Model</th>
+                <th className={TH}>Processor</th>
+                <th className={`${TH} text-right`}>AI compute</th>
+                <th className={`${TH} text-right`}>RAM</th>
+                <th className={`${TH} text-right`}>Storage</th>
+                <th className={`${TH} text-right`}>Max cameras</th>
+                <th className={`${TH} w-44`}>Devices</th>
+                <th className={TH}>
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/40">
+              {filtered.length === 0 ? (
+                <EmptyTableRow
+                  colSpan={8}
+                  icon={Cpu}
+                  title={search ? "No matching models" : "No models yet"}
+                  hint={search ? "Try a different search." : "Add a model before registering devices."}
+                />
+              ) : (
+                filtered.map((model) => {
+                  const s = readModelSpecs(model.specs);
+                  const count = model._count?.devices || 0;
+                  const share = totalDevices > 0 ? count / totalDevices : 0;
+                  return (
+                    <tr key={model.id} className={model.is_active ? "" : "text-muted-foreground"}>
+                      <td className="max-w-xs px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-foreground">{model.name}</span>
+                          {!model.is_active && (
+                            <Badge variant="outline" className="px-1.5 py-0 text-[10px] text-muted-foreground">
+                              Retired
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="block truncate font-mono text-[10px] text-muted-foreground" title={model.description ?? undefined}>
+                          {model.code}
+                          {model.description ? <span className="font-sans"> · {model.description}</span> : null}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-foreground">{s.processor ?? dash}</td>
+                      <td className="px-4 py-3 text-right font-mono">{s.aiTops !== null ? `${s.aiTops} TOPS` : dash}</td>
+                      <td className="px-4 py-3 text-right font-mono">{s.ramGb !== null ? `${s.ramGb} GB` : dash}</td>
+                      <td className="px-4 py-3 text-right font-mono">{s.storageGb !== null ? `${s.storageGb} GB` : dash}</td>
+                      <td className="px-4 py-3 text-right font-mono">{s.maxCameras ?? dash}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="w-8 text-right font-mono text-foreground">{count}</span>
+                          <div className="h-1.5 flex-1 rounded-full bg-muted" aria-hidden="true">
+                            <div className="h-full rounded-full bg-primary" style={{ width: `${share * 100}%` }} />
+                          </div>
+                          <span className="w-8 text-right text-[11px] text-muted-foreground">{Math.round(share * 100)}%</span>
+                        </div>
+                      </td>
+                      <td className="px-2 py-3 text-right">
+                        <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={() => setEditing(model)}>
+                          <Pencil className="size-3" />
+                          Edit
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <CreateModelModal open={isCreateOpen} onOpenChange={setIsCreateOpen} onSuccess={fetchModels} />
+      <CreateModelModal open={editing !== null} onOpenChange={(open) => !open && setEditing(null)} model={editing} onSuccess={fetchModels} />
     </div>
   );
 }

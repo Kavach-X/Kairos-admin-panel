@@ -13,10 +13,11 @@ export default function DashboardError({
 }) {
   return (
     <div className="flex flex-1 items-center justify-center p-6">
-      <div className="w-full max-w-md">
+      <div className="w-full min-w-0 max-w-md">
         <Alert variant="destructive">
           <ShieldAlert className="size-4" />
-          <AlertDescription>
+          {/* Messages can be long unbroken identifiers (bundler module names, ids): wrap anywhere, cap height. */}
+          <AlertDescription className="max-h-48 min-w-0 overflow-y-auto break-words [overflow-wrap:anywhere]">
             {error.message || "Something went wrong loading the dashboard."}
           </AlertDescription>
         </Alert>

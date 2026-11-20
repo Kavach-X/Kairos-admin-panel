@@ -206,7 +206,7 @@ export function BankDetailsPageClient({ initialAccounts }: { initialAccounts: Ba
       </div>
 
       {/* Bank Details Table */}
-      <div className="overflow-hidden border border-border/50 bg-card shadow-none">
+      <div className="overflow-hidden rounded-lg border border-border/60 bg-card">
         <div className="border-b border-border/40 px-4 py-2.5 flex items-center justify-between">
           <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             Bank Accounts ({filteredAccounts.length})

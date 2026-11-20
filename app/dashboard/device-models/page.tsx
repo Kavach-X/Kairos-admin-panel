@@ -1,11 +1,11 @@
 import { Suspense } from "react";
 import { getDeviceModels } from "@/lib/data/reference-data";
 import { DeviceModelsPageClient } from "@/components/dashboard/devices/device-models-page-client";
-import { ListPageSkeleton } from "@/components/dashboard/page-skeletons";
+import { CardGridPageSkeleton } from "@/components/dashboard/page-skeletons";
 
 export default function DeviceModelsPage() {
   return (
-    <Suspense fallback={<ListPageSkeleton />}>
+    <Suspense fallback={<CardGridPageSkeleton />}>
       <DeviceModelsPageData />
     </Suspense>
   );

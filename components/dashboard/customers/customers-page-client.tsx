@@ -1,27 +1,12 @@
 "use client";
 
 import * as React from "react";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Search,
-  Building2,
-  Store,
-  Eye,
-  X,
-} from "lucide-react";
+import { Building2, ChevronRight, Store } from "lucide-react";
 import type { CustomerItem } from "@/lib/types";
-import {
-  updateCustomerStatusAction,
-  reassignCustomerVendorAction,
-} from "@/lib/actions/customer.actions";
-import { CustomerDetailsSheet } from "@/components/dashboard/customers/customer-details-sheet";
-import { toast } from "sonner";
+import { EmptyTableRow, PageHeader, SearchBox, StatusTabs, countBy } from "@/components/dashboard/list-page";
+import { StatTile } from "@/components/dashboard/stat-tile";
 
 const STATUS_TABS: Array<{ label: string; value: string }> = [
   { label: "All Customers", value: "ALL" },
@@ -29,68 +14,26 @@ const STATUS_TABS: Array<{ label: string; value: string }> = [
   { label: "Suspended", value: "SUSPENDED" },
 ];
 
-type OptimisticAction =
-  | { type: "status"; customerId: string; status: "ACTIVE" | "SUSPENDED" }
-  | {
-      type: "reassign";
-      customerId: string;
-      vendor: { id: string; name: string; vendorCode?: string };
-    };
-
 interface CustomersPageClientProps {
   customers: CustomerItem[];
-  vendors: Array<{ id: string; name: string; vendorCode?: string }>;
 }
 
-export function CustomersPageClient({ customers, vendors }: CustomersPageClientProps) {
+const installedOf = (c: CustomerItem) => c.installedBoxes ?? c.activeBoxes ?? 0;
+const assignedOf = (c: CustomerItem) => c.assignedBoxes ?? Math.max(0, (c.counts?.devices ?? 0) - installedOf(c));
+
+/**
+ * Customer list. Status changes and vendor reassignment live on the customer page,
+ * which every row opens.
+ */
+export function CustomersPageClient({ customers }: CustomersPageClientProps) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = React.useState("ALL");
   const [search, setSearch] = React.useState("");
-  const [selectedCustomerId, setSelectedCustomerId] = React.useState<string | null>(null);
-  const [isReassigningVendor, startReassignTransition] = React.useTransition();
-  const [isUpdatingStatus, startStatusTransition] = React.useTransition();
-
-  // `customers` is the real Server Component data, refreshed automatically via
-  // `revalidatePath` inside the mutation actions below. The optimistic layer
-  // only patches it for the instant a mutation is in flight.
-  const [optimisticCustomers, applyOptimisticUpdate] = React.useOptimistic(
-    customers,
-    (state, action: OptimisticAction) => {
-      if (action.type === "status") {
-        return state.map((c) =>
-          c.id === action.customerId ? { ...c, status: action.status } : c
-        );
-      }
-      return state.map((c) =>
-        c.id === action.customerId
-          ? {
-              ...c,
-              profile: c.profile
-                ? {
-                    ...c.profile,
-                    managedByVendor: {
-                      id: action.vendor.id,
-                      name: action.vendor.name,
-                      vendorProfile: action.vendor.vendorCode
-                        ? { vendorCode: action.vendor.vendorCode, companyName: action.vendor.name }
-                        : null,
-                    },
-                  }
-                : c.profile,
-            }
-          : c
-      );
-    }
-  );
-
-  // Deriving the selected customer from the live list on every render means
-  // the sheet can never go stale after reassign/status actions.
-  const selectedCustomer = selectedCustomerId
-    ? optimisticCustomers.find((c) => c.id === selectedCustomerId) || null
-    : null;
+  const customerHref = (id: string) => `/dashboard/customers/${id}`;
 
   const filteredCustomers = React.useMemo(() => {
     const term = search.toLowerCase();
-    return optimisticCustomers.filter((c) => {
+    return customers.filter((c) => {
       if (activeTab !== "ALL" && c.status !== activeTab) return false;
       if (!term) return true;
       return (
@@ -105,189 +48,63 @@ export function CustomersPageClient({ customers, vendors }: CustomersPageClientP
           c.profile.managedByVendor.vendorProfile.vendorCode.toLowerCase().includes(term))
       );
     });
-  }, [optimisticCustomers, activeTab, search]);
+  }, [customers, activeTab, search]);
 
-  const totalCustomers = optimisticCustomers.length;
-  const totalAssignedBoxes = optimisticCustomers.reduce(
-    (acc, c) => acc + (c.assignedBoxes ?? Math.max(0, (c.counts?.devices ?? 0) - (c.installedBoxes ?? c.activeBoxes ?? 0))),
-    0
-  );
-  const totalInstalledBoxes = optimisticCustomers.reduce(
-    (acc, c) => acc + (c.installedBoxes ?? c.activeBoxes ?? 0),
-    0
-  );
-  const totalCameras = optimisticCustomers.reduce((acc, c) => acc + c.totalCameras, 0);
-
-  function handleStatusChange(customerId: string, status: "ACTIVE" | "SUSPENDED") {
-    startStatusTransition(async () => {
-      applyOptimisticUpdate({ type: "status", customerId, status });
-      const res = await updateCustomerStatusAction(customerId, status);
-      if (res.success) {
-        toast.success(`Customer status updated to ${status}`);
-      } else {
-        toast.error(res.error || "Failed to update customer status");
-      }
-    });
-  }
-
-  function handleReassignVendor(customerId: string, vendorAccountId: string) {
-    const vendor = vendors.find((v) => v.id === vendorAccountId);
-    startReassignTransition(async () => {
-      if (vendor) {
-        applyOptimisticUpdate({ type: "reassign", customerId, vendor });
-      }
-      const res = await reassignCustomerVendorAction(customerId, vendorAccountId);
-      if (res.success) {
-        toast.success("Managing vendor partner reassigned successfully");
-      } else {
-        toast.error(res.error || "Failed to reassign vendor");
-      }
-    });
-  }
+  const totalCustomers = customers.length;
+  const statusCounts = countBy(customers, (c) => c.status);
+  const totalInstalledBoxes = customers.reduce((acc, c) => acc + installedOf(c), 0);
+  const totalAssignedBoxes = customers.reduce((acc, c) => acc + assignedOf(c), 0);
+  const totalCameras = customers.reduce((acc, c) => acc + c.totalCameras, 0);
+  const withoutBoxes = customers.filter((c) => installedOf(c) + assignedOf(c) === 0).length;
+  const viaVendor = customers.filter((c) => c.profile?.managedByVendor).length;
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pb-1">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight text-foreground">
-            Customers & Stores
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            Subscriber store locations, hardware deployments, and camera channels
-          </p>
-        </div>
+      <PageHeader title="Customer Stores" subtitle="Customer accounts, the boxes and cameras at each site, and who manages them" />
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile
+          label="Customers"
+          value={String(totalCustomers)}
+          info="Every customer account (a store or site owner). The line below shows how many came through a vendor partner rather than signing up directly."
+          footer={<span className="text-[11px] text-muted-foreground">{viaVendor} managed by vendors</span>}
+        />
+        <StatTile
+          label="Boxes installed"
+          value={String(totalInstalledBoxes)}
+          info="Edge boxes fitted and running at customer sites."
+          footer={<span className="text-[11px] text-muted-foreground">{totalAssignedBoxes} more assigned, not yet installed</span>}
+        />
+        <StatTile
+          label="Cameras"
+          value={String(totalCameras)}
+          info="Camera feeds connected to boxes at customer sites. Each camera is watched by the box it is plugged into."
+          footer={
+            <span className="text-[11px] text-muted-foreground">
+              {totalInstalledBoxes > 0 ? `≈ ${(totalCameras / totalInstalledBoxes).toFixed(1)} per installed box` : "No boxes installed yet"}
+            </span>
+          }
+        />
+        <StatTile
+          label="Without a box"
+          value={String(withoutBoxes)}
+          info="Customers who have an account but no box assigned or installed yet, so nothing is protecting their site. Usually waiting for a shipment or an installation visit."
+          footer={<span className="text-[11px] text-muted-foreground">{withoutBoxes > 0 ? "Not protected yet" : "Every customer has a box"}</span>}
+        />
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-border/50 bg-card p-4 shadow-none hover:border-border transition-colors duration-100">
-          <CardContent className="p-0 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                Total Stores
-              </span>
-              <span className="font-mono text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                active
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="font-mono text-2xl font-bold tracking-tight text-foreground">
-                {totalCustomers}
-              </span>
-              <span className="text-[11px] text-muted-foreground/70">
-                business subscribers
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card p-4 shadow-none hover:border-border transition-colors duration-100">
-          <CardContent className="p-0 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                Assigned Boxes
-              </span>
-              <span className="font-mono text-[11px] font-medium text-amber-600 dark:text-amber-400">
-                pending setup
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="font-mono text-2xl font-bold tracking-tight text-foreground">
-                {totalAssignedBoxes}
-              </span>
-              <span className="text-[11px] text-muted-foreground/70">
-                hardware units
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card p-4 shadow-none hover:border-border transition-colors duration-100">
-          <CardContent className="p-0 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                Installed Boxes
-              </span>
-              <span className="font-mono text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                live
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="font-mono text-2xl font-bold tracking-tight text-foreground">
-                {totalInstalledBoxes}
-              </span>
-              <span className="text-[11px] text-muted-foreground/70">
-                surveillance units
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card p-4 shadow-none hover:border-border transition-colors duration-100">
-          <CardContent className="p-0 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                Camera Streams
-              </span>
-              <span className="font-mono text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                RTSP feeds
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="font-mono text-2xl font-bold tracking-tight text-foreground">
-                {totalCameras}
-              </span>
-              <span className="text-[11px] text-muted-foreground/70">
-                video channels
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Tabs & Search */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-        <div className="flex flex-wrap items-center gap-1 p-1 bg-muted/40 rounded-md border border-border/50">
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => setActiveTab(tab.value)}
-              className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
-                activeTab === tab.value
-                  ? "bg-card text-foreground shadow-none border border-border/60"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1 sm:w-64">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              placeholder="Search store or owner..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 pr-8 text-xs h-8 border-border/50 bg-card shadow-none"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch("")}
-                className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
+      <div className="flex flex-col gap-3">
+        <StatusTabs
+          label="Account status"
+          tabs={STATUS_TABS.map((t) => ({ ...t, count: t.value === "ALL" ? totalCustomers : (statusCounts[t.value] ?? 0) }))}
+          active={activeTab}
+          onChange={setActiveTab}
+        />
+        <SearchBox value={search} onChange={setSearch} placeholder="Search store, owner, phone or vendor..." />
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden border border-border/50 bg-card shadow-none">
+      <div className="overflow-hidden rounded-lg border border-border/60 bg-card">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-muted/30 border-b border-border/40 text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -298,22 +115,17 @@ export function CustomersPageClient({ customers, vendors }: CustomersPageClientP
                 <th className="px-4 py-2.5 font-medium">Boxes</th>
                 <th className="px-4 py-2.5 font-medium">Cameras</th>
                 <th className="px-4 py-2.5 font-medium">Status</th>
-                <th className="px-4 py-2.5 font-medium text-right">Actions</th>
+                <th className="px-4 py-2.5 font-medium text-right"><span className="sr-only">Open</span></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/40">
               {filteredCustomers.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
-                    <Building2 className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                    <p className="font-medium text-foreground">
-                      {search ? "No matching customer stores found" : "No customer stores found"}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {search ? "Try adjusting your search criteria." : ""}
-                    </p>
-                  </td>
-                </tr>
+                <EmptyTableRow
+                  colSpan={7}
+                  icon={Building2}
+                  title={search || activeTab !== "ALL" ? "No matching customers" : "No customers yet"}
+                  hint={search || activeTab !== "ALL" ? "Try another tab or clear the search." : "Customers appear here once they are onboarded."}
+                />
               ) : (
                 filteredCustomers.map((cust) => {
                   const isActive = cust.status === "ACTIVE";
@@ -321,8 +133,9 @@ export function CustomersPageClient({ customers, vendors }: CustomersPageClientP
                   return (
                     <tr
                       key={cust.id}
-                      className="hover:bg-muted/20 transition-colors cursor-pointer"
-                      onClick={() => setSelectedCustomerId(cust.id)}
+                      className="group cursor-pointer transition-colors hover:bg-muted/20"
+                      onClick={() => router.push(customerHref(cust.id))}
+                      onMouseEnter={() => router.prefetch(customerHref(cust.id))}
                     >
                       <td className="px-4 py-3 font-medium text-foreground">
                         {cust.name}
@@ -356,8 +169,8 @@ export function CustomersPageClient({ customers, vendors }: CustomersPageClientP
 
                       <td className="px-4 py-3">
                         {(() => {
-                          const installed = cust.installedBoxes ?? cust.activeBoxes ?? 0;
-                          const assigned = cust.assignedBoxes ?? Math.max(0, (cust.counts?.devices ?? 0) - installed);
+                          const installed = installedOf(cust);
+                          const assigned = assignedOf(cust);
                           const hasAny = installed > 0 || assigned > 0;
 
                           if (!hasAny) {
@@ -404,19 +217,8 @@ export function CustomersPageClient({ customers, vendors }: CustomersPageClientP
                         </Badge>
                       </td>
 
-                      <td
-                        className="px-4 py-3 text-right"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-xs gap-1"
-                          onClick={() => setSelectedCustomerId(cust.id)}
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                          View Details
-                        </Button>
+                      <td className="px-4 py-3 text-right">
+                        <ChevronRight className="ml-auto size-4 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
                       </td>
                     </tr>
                   );
@@ -427,17 +229,6 @@ export function CustomersPageClient({ customers, vendors }: CustomersPageClientP
         </div>
       </div>
 
-      {/* Details Sheet */}
-      <CustomerDetailsSheet
-        open={Boolean(selectedCustomer)}
-        onOpenChange={(open) => !open && setSelectedCustomerId(null)}
-        customer={selectedCustomer}
-        vendors={vendors}
-        onStatusChange={handleStatusChange}
-        onReassignVendor={handleReassignVendor}
-        isReassigningVendor={isReassigningVendor}
-        isUpdatingStatus={isUpdatingStatus}
-      />
     </div>
   );
 }

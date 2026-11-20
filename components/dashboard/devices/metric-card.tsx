@@ -146,7 +146,7 @@ export function MetricCard({
   const show = (v: number) => (format ? format(v) : `${fmt(v, decimals)}${unit}`);
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
+    <div className="flex flex-col gap-3 rounded-lg border border-border/60 bg-card p-4">
       <div className="flex flex-col gap-1.5">
         <span className="text-xs font-medium text-muted-foreground">{title}</span>
         {series.map((s) => (

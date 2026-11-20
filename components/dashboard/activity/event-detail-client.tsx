@@ -1,102 +1,65 @@
 "use client";
 
 import * as React from "react";
-import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  ArrowLeft,
-  Building2,
-  HardDrive,
-  Camera,
-  Video,
-  Clock,
-  ShieldAlert,
-  AlertTriangle,
-  ExternalLink,
-  Copy,
-  Check,
-  Radio,
-  Bell,
-  Sparkles,
-  Loader2,
-  RefreshCw,
-  Cpu,
-  Mail,
-  Maximize2,
-  X,
-  Play,
-  Layers,
-  Info,
-} from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AlertTriangle, ArrowLeft, Building2, Camera, Check, Clock, Copy, HardDrive, Maximize2, Play, RefreshCw, ShieldAlert, X } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 import { getEventDetailsAction } from "@/lib/actions/event.actions";
+import type { CameraEventDetail } from "@/lib/types";
+import { CardShell } from "@/components/dashboard/analytics/viz";
+import { DetailHeader, Facts, SURFACE } from "@/components/dashboard/detail-header";
 import { AiAnalysisSections, ManualReviewDialog, describeEventDecision } from "./review-parts";
-import type { CameraEventDetail, EventThreatLevel } from "@/lib/types";
+import { DETECTION_INFO, DetectionSummary } from "./event-quick-view";
+import { EventTimeline } from "./event-context";
+import { EventStatusBadge, ThreatBadge } from "./event-badges";
 
-const threatBadges: Record<
-  EventThreatLevel,
-  { label: string; bg: string; dot: string; border: string }
-> = {
-  CRITICAL: {
-    label: "Critical Threat",
-    bg: "bg-red-500/10 text-red-600 dark:text-red-400",
-    border: "border-red-500/30",
-    dot: "bg-red-500",
-  },
-  HIGH: {
-    label: "High Alert",
-    bg: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-    border: "border-rose-500/30",
-    dot: "bg-rose-500",
-  },
-  MEDIUM: {
-    label: "Medium Priority",
-    bg: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-    border: "border-amber-500/30",
-    dot: "bg-amber-500",
-  },
-  LOW: {
-    label: "Low Priority",
-    bg: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-    border: "border-blue-500/30",
-    dot: "bg-blue-500",
-  },
-  NONE: {
-    label: "Routine Telemetry",
-    bg: "bg-muted text-muted-foreground",
-    border: "border-border",
-    dot: "bg-muted-foreground",
-  },
-};
+// Fixed locale and zone so the server render and the browser agree.
+const DATE_TIME = new Intl.DateTimeFormat("en-IN", {
+  timeZone: "Asia/Kolkata",
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
 
-const statusColors: Record<string, string> = {
-  CONFIRMED_ALERT: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
-  DISMISSED_BY_USER: "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/30",
-  DISCARDED_FALSE_ALARM: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
-  PROCESSING_AI: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30",
-  RECORDED: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30",
-  PENDING_UPLOAD: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30",
-};
+const titleCase = (s: string) => s.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-function getInitialMedia(data: CameraEventDetail): { url: string | null; type: "video" | "image" } {
-  // Initialize active media: prioritize video
-  const primaryVideo = data.videos?.find((v: any) => v.clipUrl || v.playbackUrl) || data.videos?.[0];
-  const videoUrl = primaryVideo?.playbackUrl || primaryVideo?.clipUrl;
-  const primaryThumb =
-    data.thumbnails?.find((t) => t.isPrimary && (t.viewUrl || t.thumbnailUrl)) ||
-    data.thumbnails?.find((t) => t.viewUrl || t.thumbnailUrl) ||
-    (data.cover_thumbnail?.viewUrl || data.cover_thumbnail?.thumbnailUrl ? data.cover_thumbnail : null);
-  const thumbUrl = primaryThumb?.viewUrl || primaryThumb?.thumbnailUrl;
-
-  if (videoUrl) return { url: videoUrl, type: "video" };
-  if (thumbUrl) return { url: thumbUrl, type: "image" };
-  return { url: null, type: "video" };
+interface MediaItem {
+  key: string;
+  kind: "image" | "video";
+  url: string;
+  label: string;
+  /** Snapshot shown in the strip (clips use a play tile). */
+  thumb?: string;
 }
+
+/** Snapshots first (primary on top), then clips in order. */
+function mediaOf(event: CameraEventDetail): MediaItem[] {
+  const thumbs = event.thumbnails?.length ? event.thumbnails : event.cover_thumbnail ? [event.cover_thumbnail] : [];
+  const images = [...thumbs]
+    .sort((a, b) => Number(!!b.isPrimary) - Number(!!a.isPrimary))
+    .flatMap((t, i): MediaItem[] => {
+      const url = t.viewUrl || t.thumbnailUrl || t.view_url || t.thumbnail_url;
+      return url ? [{ key: t.id || `t${i}`, kind: "image", url, thumb: url, label: thumbs.length > 1 ? `Snapshot ${i + 1}` : "Snapshot" }] : [];
+    });
+  const videos = [...(event.videos ?? [])]
+    .sort((a, b) => (a.sequenceNumber ?? 0) - (b.sequenceNumber ?? 0))
+    .flatMap((v, i): MediaItem[] => {
+      const url = v.playbackUrl || v.clipUrl;
+      const secs = v.durationSeconds ? ` · ${v.durationSeconds}s` : "";
+      return url ? [{ key: v.id || `v${i}`, kind: "video", url, label: `${(event.videos?.length ?? 0) > 1 ? `Clip ${i + 1}` : "Clip"}${secs}` }] : [];
+    });
+  return [...images, ...videos];
+}
+
+/** The clip is the best evidence when there is one; otherwise the primary snapshot. */
+const defaultMedia = (items: MediaItem[]) => items.find((m) => m.kind === "video") ?? items[0] ?? null;
 
 export interface EventDetailInitial {
   event: CameraEventDetail | null;
@@ -104,775 +67,283 @@ export interface EventDetailInitial {
 }
 
 export function EventDetailClient({ initial }: { initial: EventDetailInitial }) {
-  const params = useParams();
-  const router = useRouter();
-  const eventId = params?.id as string;
-
   const [event, setEvent] = React.useState<CameraEventDetail | null>(initial.event);
-  const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(initial.error);
+  const [refreshing, setRefreshing] = React.useState(false);
   const [reviewOpen, setReviewOpen] = React.useState(false);
-  const [copiedId, setCopiedId] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+  const [activeKey, setActiveKey] = React.useState<string | null>(null);
+  const [failed, setFailed] = React.useState<Set<string>>(() => new Set());
+  const [enlarged, setEnlarged] = React.useState<string | null>(null);
 
-  // Active preview selection (null = default to primary video/thumbnail)
-  const initialMedia = initial.event ? getInitialMedia(initial.event) : { url: null, type: "video" as const };
-  const [activeMediaUrl, setActiveMediaUrl] = React.useState<string | null>(initialMedia.url);
-  const [activeMediaType, setActiveMediaType] = React.useState<"video" | "image">(initialMedia.type);
-  const [enlargedImage, setEnlargedImage] = React.useState<string | null>(null);
-  const [failedImageUrls, setFailedImageUrls] = React.useState<Set<string>>(new Set());
-
-  const fetchEvent = React.useCallback(async () => {
-    if (!eventId) return;
-    setLoading(true);
-    setError(null);
-    const res = await getEventDetailsAction(eventId);
+  // Refresh keeps the page in place: the button spins, the content swaps when the new data lands.
+  const refresh = React.useCallback(async () => {
+    if (!event) return;
+    setRefreshing(true);
+    const res = await getEventDetailsAction(event.id);
     if (res.success && res.data) {
       setEvent(res.data);
-      const media = getInitialMedia(res.data);
-      setActiveMediaUrl(media.url);
-      setActiveMediaType(media.type);
+      setError(null);
+      // Signed media URLs change on every fetch.
+      setFailed(new Set());
     } else {
-      setError(res.error || "Event telemetry record not found");
+      toast.error(res.error || "Couldn't refresh this event");
     }
-    setLoading(false);
-  }, [eventId]);
+    setRefreshing(false);
+  }, [event]);
 
   React.useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "instant" });
-  }, [eventId]);
-
-  React.useEffect(() => {
-    if (!loading) {
-      window.scrollTo({ top: 0, behavior: "instant" });
-    }
-  }, [loading]);
-
-  // The server already loaded this event; only refetch when the id changes.
-  const loadedId = React.useRef(eventId);
-  React.useEffect(() => {
-    if (loadedId.current === eventId) return;
-    loadedId.current = eventId;
-    fetchEvent();
-  }, [eventId, fetchEvent]);
-
-  const handleCopyId = () => {
-    if (!eventId) return;
-    navigator.clipboard.writeText(eventId);
-    setCopiedId(true);
-    toast.success("Event ID copied to clipboard");
-    setTimeout(() => setCopiedId(false), 2000);
-  };
-
-  // High-fidelity zero-layout-shift Skeleton Loader
-  if (loading) {
-    return (
-      <div className="flex flex-col gap-6 max-w-6xl mx-auto pb-12 animate-pulse">
-        {/* Top bar skeleton */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-2 border-b border-border/50">
-          <div className="flex items-center gap-3">
-            <Skeleton className="h-8 w-20 rounded-md" />
-            <Skeleton className="h-6 w-28 rounded-full" />
-            <Skeleton className="h-6 w-32 rounded-md" />
-          </div>
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-8 w-36 rounded-md" />
-            <Skeleton className="h-8 w-20 rounded-md" />
-          </div>
-        </div>
-
-        {/* Main 2-column grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            {/* Player container skeleton */}
-            <div className="rounded-xl border border-border/70 bg-zinc-950 aspect-video flex flex-col justify-between p-4">
-              <div className="flex justify-between items-center">
-                <Skeleton className="h-4 w-36 bg-zinc-800 rounded" />
-                <Skeleton className="h-4 w-24 bg-zinc-800 rounded" />
-              </div>
-              <div className="self-center">
-                <Skeleton className="size-16 rounded-full bg-zinc-800/60" />
-              </div>
-              <div className="flex justify-between items-center pt-2 border-t border-zinc-900">
-                <Skeleton className="h-4 w-48 bg-zinc-800 rounded" />
-                <Skeleton className="h-4 w-28 bg-zinc-800 rounded" />
-              </div>
-            </div>
-
-            {/* Keyframes Thumbnails Gallery strip skeleton */}
-            <div className="rounded-xl border border-border/60 bg-card p-4 space-y-3">
-              <div className="flex justify-between items-center">
-                <Skeleton className="h-4 w-44" />
-                <Skeleton className="h-4 w-20" />
-              </div>
-              <div className="flex gap-3 overflow-hidden">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="h-20 w-32 rounded-lg shrink-0" />
-                ))}
-              </div>
-            </div>
-
-            {/* Cloud AI Verdict Card skeleton */}
-            <div className="rounded-xl border border-border/60 bg-card p-5 space-y-4">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2.5">
-                  <Skeleton className="size-8 rounded-lg" />
-                  <div className="space-y-1">
-                    <Skeleton className="h-4 w-44" />
-                    <Skeleton className="h-3 w-32" />
-                  </div>
-                </div>
-                <Skeleton className="h-6 w-24 rounded-full" />
-              </div>
-              <Skeleton className="h-20 w-full rounded-lg" />
-              <div className="flex gap-2">
-                <Skeleton className="h-6 w-20 rounded-md" />
-                <Skeleton className="h-6 w-24 rounded-md" />
-                <Skeleton className="h-6 w-16 rounded-md" />
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column skeleton */}
-          <div className="space-y-6">
-            {/* Triage action card skeleton */}
-            <div className="rounded-xl border border-border/60 bg-card p-5 space-y-3">
-              <Skeleton className="h-4 w-36" />
-              <Skeleton className="h-10 w-full rounded-md" />
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <Skeleton className="h-9 w-full rounded-md" />
-                <Skeleton className="h-9 w-full rounded-md" />
-              </div>
-            </div>
-
-            {/* Hardware EdgeBox card skeleton */}
-            <div className="rounded-xl border border-border/60 bg-card p-5 space-y-3">
-              <Skeleton className="h-4 w-48" />
-              <Skeleton className="h-12 w-full rounded-lg" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-8 w-full rounded-md mt-2" />
-            </div>
-
-            {/* Alert channels skeleton */}
-            <div className="rounded-xl border border-border/60 bg-card p-5 space-y-3">
-              <Skeleton className="h-4 w-40" />
-              <Skeleton className="h-8 w-full rounded-md" />
-            </div>
-
-            {/* Timestamps skeleton */}
-            <div className="rounded-xl border border-border/60 bg-card p-5 space-y-2">
-              <Skeleton className="h-3.5 w-full" />
-              <Skeleton className="h-3.5 w-full" />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+    if (!enlarged) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setEnlarged(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [enlarged]);
 
   if (error || !event) {
     return (
-      <div className="flex flex-col items-center justify-center p-12 text-center max-w-lg mx-auto">
-        <AlertTriangle className="h-10 w-10 text-amber-500 mb-3" />
-        <h2 className="text-lg font-bold text-foreground">Event Not Found</h2>
-        <p className="text-xs text-muted-foreground mt-1 mb-4">{error || "Unable to retrieve event telemetry."}</p>
-        <Link
-          href="/dashboard/activity"
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5")}
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Events
+      <div className="mx-auto flex max-w-lg flex-col items-center justify-center p-12 text-center">
+        <AlertTriangle className="mb-3 size-8 text-amber-500" />
+        <h2 className="text-base font-semibold text-foreground">Event not found</h2>
+        <p className="mb-4 mt-1 text-xs text-muted-foreground">{error || "This event could not be loaded."}</p>
+        <Link href="/dashboard/activity" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5")}>
+          <ArrowLeft className="size-3.5" />
+          Back to events
         </Link>
       </div>
     );
   }
 
-  const threatInfo = threatBadges[event.threatLevel] || threatBadges.NONE;
-  const primaryVideo = event.videos?.find((v: any) => v.clipUrl || v.playbackUrl) || event.videos?.[0];
-  const videoPlaybackUrl = primaryVideo?.playbackUrl || primaryVideo?.clipUrl;
-  const primaryThumbnail =
-    event.thumbnails?.find((t) => t.isPrimary && (t.viewUrl || t.thumbnailUrl)) ||
-    event.thumbnails?.find((t) => t.viewUrl || t.thumbnailUrl) ||
-    event.cover_thumbnail;
+  const media = mediaOf(event).filter((m) => !failed.has(m.url));
+  const active = media.find((m) => m.key === activeKey) ?? defaultMedia(media);
+  const markFailed = (url: string) => setFailed((prev) => new Set(prev).add(url));
 
-  const allThumbnails = event.thumbnails && event.thumbnails.length > 0
-    ? event.thumbnails
-    : event.cover_thumbnail
-    ? [event.cover_thumbnail]
-    : [];
+  const aiFailed = [...(event.thumbnails ?? []), ...(event.videos ?? [])].some((m) => m.aiStatus === "FAILED");
+  const decision = describeEventDecision(event);
+  const cameraName = event.camera?.name || `Channel ${event.channelNumber ?? "?"}`;
 
-  const validThumbnails = allThumbnails.filter((t) => {
-    const url = t.viewUrl || t.thumbnailUrl || t.view_url || t.thumbnail_url;
-    return Boolean(url && !failedImageUrls.has(url));
-  });
-
-  const customerName = event.account?.name || "Direct Customer Site";
-  const cameraName = event.camera?.name || `Camera #${event.channelNumber || 1}`;
-
-  // Cloud AI evaluation determination
-  const isActivelyAnalyzing =
-    event.status === "PROCESSING_AI" ||
-    primaryVideo?.aiStatus === "ANALYZING" ||
-    primaryThumbnail?.aiStatus === "ANALYZING";
-
-  const isFailed =
-    primaryVideo?.aiStatus === "FAILED" ||
-    primaryThumbnail?.aiStatus === "FAILED";
-
-  // Email Notification Variation classification based on alert threat level
-  const emailVariation =
-    event.threatLevel === "CRITICAL" || event.threatLevel === "HIGH"
-      ? {
-          name: "Critical Security Threat Template",
-          desc: "High-priority SMS & immediate dispatch with keyframe thumbnail attachment.",
-          badge: "Urgent Escalation",
-          badgeColor: "bg-rose-500/10 text-rose-600 border-rose-500/30",
-        }
-      : event.threatLevel === "MEDIUM" || event.threatLevel === "LOW"
-      ? {
-          name: "Standard Perimeter Incident Template",
-          desc: "Routine notification digest sent to registered site managers.",
-          badge: "Informational",
-          badgeColor: "bg-blue-500/10 text-blue-600 border-blue-500/30",
-        }
-      : {
-          name: "Routine Activity Log Template",
-          desc: "Aggregated daily summary without emergency broadcast.",
-          badge: "Digest",
-          badgeColor: "bg-zinc-500/10 text-zinc-600 border-zinc-500/30",
-        };
+  const copyId = async () => {
+    try {
+      await navigator.clipboard.writeText(event.id);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Could not copy to the clipboard");
+    }
+  };
 
   return (
-    <div className="flex flex-col gap-6 max-w-6xl mx-auto pb-12">
-      {/* Top Navigation & Action Bar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-2 border-b border-border/50">
-        <div className="flex items-center gap-3 flex-wrap">
-          <Link
-            href="/dashboard/activity"
-            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-8 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground")}
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Events
-          </Link>
-
-          <span className="text-muted-foreground/40">/</span>
-
-          <div className="flex items-center gap-2">
-            <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${threatInfo.bg} ${threatInfo.border}`}>
-              <span className={`size-1.5 rounded-full ${threatInfo.dot}`} />
-              {threatInfo.label}
-            </span>
-
-            {isActivelyAnalyzing ? (
-              <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 font-medium">
-                Pending Cloud
-              </Badge>
-            ) : isFailed ? (
-              <Badge variant="outline" className="text-xs bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 font-medium flex items-center gap-1.5">
-                <AlertTriangle className="size-3 text-rose-500" />
-                AI Analysis Failed
-              </Badge>
-            ) : event.status === "RECORDED" ? (
-              <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 font-medium">
-                {primaryThumbnail?.aiStatus === "COMPLETED" ? "Snapshot Clear · Awaiting Clip" : "Pending Cloud"}
-              </Badge>
-            ) : event.status === "PENDING_UPLOAD" ? (
-              <Badge variant="outline" className="text-xs bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30 font-medium">
-                Pending Upload
-              </Badge>
-            ) : (
-              <Badge
-                variant="outline"
-                className={`text-xs ${statusColors[event.status] || "border-border"}`}
-              >
-                {event.status.replace(/_/g, " ")}
+    <div className="flex flex-col gap-5">
+      <DetailHeader
+        back={{ href: "/dashboard/activity", label: "Events" }}
+        title={titleCase(event.edgeLabel || "Detection")}
+        badges={
+          <>
+            <ThreatBadge level={event.threatLevel} />
+            <EventStatusBadge status={event.status} />
+            {aiFailed && (
+              <Badge variant="destructive" className="px-1.5 py-0 text-[10px]">
+                AI failed
               </Badge>
             )}
-          </div>
-        </div>
+          </>
+        }
+        meta={[
+          <>
+            <Clock className="size-3" />
+            <span suppressHydrationWarning>{DATE_TIME.format(new Date(event.createdAt))}</span>
+          </>,
+          event.account?.name && (
+            <>
+              <Building2 className="size-3" />
+              {event.businessAccountId ? (
+                <Link href={`/dashboard/customers/${event.businessAccountId}`} className="hover:text-foreground hover:underline">
+                  {event.account.name}
+                </Link>
+              ) : (
+                event.account.name
+              )}
+            </>
+          ),
+          <>
+            <Camera className="size-3" />
+            {cameraName}
+          </>,
+          event.deviceId && (
+            <>
+              <HardDrive className="size-3" />
+              <Link href={`/dashboard/devices/${encodeURIComponent(event.deviceId)}`} className="font-mono hover:text-foreground hover:underline">
+                {event.deviceId}
+              </Link>
+            </>
+          ),
+        ]}
+        actions={
+          <>
+            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={copyId}>
+              {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
+              Copy ID
+            </Button>
+            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={refresh} disabled={refreshing}>
+              <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
+              Refresh
+            </Button>
+          </>
+        }
+      />
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={handleCopyId}
-            className="inline-flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-foreground bg-muted/50 px-2.5 py-1 rounded-md border border-border/60 transition-colors"
-            title="Copy Event ID"
-          >
-            {copiedId ? <Check className="size-3 text-emerald-500" /> : <Copy className="size-3" />}
-            <span>ID: {event.id.slice(0, 14)}...</span>
-          </button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs gap-1.5"
-            onClick={fetchEvent}
-          >
-            <RefreshCw className="size-3" />
-            Refresh
-          </Button>
-        </div>
-      </div>
-
-      {/* Main Grid: Left Column = Forensic Visuals & Cloud AI, Right Column = Hardware EdgeBox & Controls */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column (2 Cols) */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Visual Media Viewer */}
-          <div className="rounded-xl border border-border/70 bg-black overflow-hidden shadow-sm flex flex-col justify-center min-h-[340px]">
-            {activeMediaType === "video" && activeMediaUrl ? (
-              <div className="w-full">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="flex min-w-0 flex-col gap-4">
+          {/* Media: the player and every snapshot / clip in one card */}
+          <div className={`${SURFACE} overflow-hidden`}>
+            <div className="group relative flex aspect-video items-center justify-center bg-black">
+              {!active ? (
+                <div className="flex flex-col items-center gap-2 px-6 text-center text-zinc-500">
+                  <Camera className="size-8 stroke-1" />
+                  <p className="text-xs">No snapshot or clip was uploaded for this event.</p>
+                </div>
+              ) : active.kind === "video" ? (
                 <video
-                  src={activeMediaUrl}
+                  key={active.url}
+                  src={active.url}
                   controls
                   muted
                   playsInline
-                  className="w-full max-h-[460px] bg-black aspect-video object-contain"
+                  onError={() => markFailed(active.url)}
+                  className="h-full w-full object-contain"
                 />
-                <div className="flex items-center justify-between bg-zinc-950 px-4 py-2.5 text-xs text-zinc-400 border-t border-zinc-800">
-                  <span className="flex items-center gap-2 font-medium text-emerald-400">
-                    <Video className="size-4" />
-                    Recorded Cloud Forensic Clip ({primaryVideo?.durationSeconds || event.totalDurationSeconds || 10}s)
-                  </span>
-                  <span className="font-mono text-[11px] text-zinc-500">Decoupled AI Chunk</span>
-                </div>
-              </div>
-            ) : activeMediaType === "image" && activeMediaUrl && !failedImageUrls.has(activeMediaUrl) ? (
-              <div className="relative group w-full">
-                <img
-                  src={activeMediaUrl}
-                  alt={event.edgeLabel}
-                  onError={() => {
-                    setFailedImageUrls((prev) => {
-                      const next = new Set(prev);
-                      next.add(activeMediaUrl);
-                      return next;
-                    });
-                    if (videoPlaybackUrl) {
-                      setActiveMediaUrl(videoPlaybackUrl);
-                      setActiveMediaType("video");
-                    } else {
-                      setActiveMediaUrl(null);
-                    }
-                  }}
-                  className="w-full max-h-[460px] object-contain bg-black"
-                />
-                <button
-                  type="button"
-                  onClick={() => setEnlargedImage(activeMediaUrl)}
-                  className="absolute top-3 right-3 bg-black/70 hover:bg-black text-white p-1.5 rounded-md border border-white/20 transition-all opacity-80 group-hover:opacity-100"
-                  title="Enlarge Keyframe"
-                >
-                  <Maximize2 className="size-4" />
-                </button>
-                <div className="flex items-center justify-between bg-zinc-950 px-4 py-2.5 text-xs text-zinc-400 border-t border-zinc-800">
-                  <span className="flex items-center gap-2 font-medium text-amber-400">
-                    <Camera className="size-4" />
-                    Keyframe Snapshot Preview
-                  </span>
-                  <span className="font-mono text-[11px] text-zinc-500">Tier-1 Realtime Triage</span>
-                </div>
-              </div>
-            ) : videoPlaybackUrl ? (
-              <div className="w-full">
-                <video
-                  src={videoPlaybackUrl}
-                  controls
-                  muted
-                  playsInline
-                  className="w-full max-h-[460px] bg-black aspect-video object-contain"
-                />
-                <div className="flex items-center justify-between bg-zinc-950 px-4 py-2.5 text-xs text-zinc-400 border-t border-zinc-800">
-                  <span className="flex items-center gap-2 font-medium text-emerald-400">
-                    <Video className="size-4" />
-                    Recorded Video Footage
-                  </span>
-                  <span className="font-mono text-[11px] text-zinc-500">Edge Chunk</span>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center p-14 text-center text-zinc-500">
-                <Radio className="size-12 mb-3 stroke-1 text-zinc-600" />
-                <h4 className="text-sm font-semibold text-zinc-300">Telemetry-Only Event</h4>
-                <p className="text-xs text-zinc-500 max-w-sm mt-1">
-                  Registered via edge MQTT broker without recorded visual media chunk attached.
-                </p>
-              </div>
-            )}
-          </div>
+              ) : (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- signed R2 URL, not optimizable */}
+                  <img src={active.url} alt={event.edgeLabel} onError={() => markFailed(active.url)} className="h-full w-full object-contain" />
+                  <button
+                    type="button"
+                    onClick={() => setEnlarged(active.url)}
+                    aria-label="View full size"
+                    className="absolute right-3 top-3 rounded-md bg-black/60 p-1.5 text-white opacity-0 transition-opacity hover:bg-black group-hover:opacity-100 focus-visible:opacity-100"
+                  >
+                    <Maximize2 className="size-4" />
+                  </button>
+                </>
+              )}
+            </div>
 
-          {/* Keyframe Snapshots & Thumbnails Gallery ("umbiles") */}
-          {validThumbnails.length > 0 && (
-            <Card className="border-border/60">
-              <CardHeader className="pb-3 border-b border-border/40">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Layers className="size-4 text-primary" />
-                    <CardTitle className="text-sm font-semibold text-foreground">
-                      Keyframe Snapshots & Thumbnails ({validThumbnails.length})
-                    </CardTitle>
-                  </div>
-                  <span className="text-[11px] text-muted-foreground">Click to preview in player</span>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
-                  {validThumbnails.map((thumb, idx) => {
-                    const thumbUrl = thumb.viewUrl || thumb.thumbnailUrl || thumb.view_url || thumb.thumbnail_url;
-                    if (!thumbUrl) return null;
-                    const isSelected = activeMediaUrl === thumbUrl && activeMediaType === "image";
-
-                    return (
-                      <div
-                        key={thumb.id || idx}
-                        onClick={() => {
-                          setActiveMediaUrl(thumbUrl);
-                          setActiveMediaType("image");
-                        }}
-                        className={cn(
-                          "relative group cursor-pointer shrink-0 rounded-lg border overflow-hidden transition-all w-36 bg-zinc-950",
-                          isSelected
-                            ? "border-primary ring-2 ring-primary/30"
-                            : "border-border hover:border-primary/50"
-                        )}
-                      >
-                        <img
-                          src={thumbUrl}
-                          alt={`Keyframe ${idx + 1}`}
-                          onError={() => {
-                            setFailedImageUrls((prev) => {
-                              const next = new Set(prev);
-                              next.add(thumbUrl);
-                              return next;
-                            });
-                          }}
-                          className="h-20 w-36 object-cover bg-black"
-                        />
-                        <div className="p-1.5 bg-card/95 text-[10px] flex items-center justify-between border-t border-border/40">
-                          <span className="font-mono text-muted-foreground">
-                            {thumb.isPrimary ? "★ Primary" : `Shot #${idx + 1}`}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEnlargedImage(thumbUrl);
-                            }}
-                            className="text-muted-foreground hover:text-foreground"
-                            title="Zoom"
-                          >
-                            <Maximize2 className="size-3" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* Switch back to video button if video exists */}
-                  {primaryVideo && (primaryVideo.playbackUrl || primaryVideo.clipUrl) && (
+            {media.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto border-t border-border/40 p-2">
+                {media.map((m) => {
+                  const selected = m.key === active?.key;
+                  return (
                     <button
+                      key={m.key}
                       type="button"
-                      onClick={() => {
-                        setActiveMediaUrl(primaryVideo.playbackUrl || primaryVideo.clipUrl || null);
-                        setActiveMediaType("video");
-                      }}
+                      onClick={() => setActiveKey(m.key)}
+                      aria-pressed={selected}
+                      title={m.label}
                       className={cn(
-                        "relative cursor-pointer shrink-0 rounded-lg border border-dashed border-border hover:border-emerald-500/60 p-2 flex flex-col items-center justify-center gap-1.5 w-28 bg-muted/20 text-xs transition-all",
-                        activeMediaType === "video" ? "border-emerald-500 text-emerald-500 bg-emerald-500/5" : "text-muted-foreground"
+                        "relative h-12 w-20 shrink-0 overflow-hidden rounded-md border bg-zinc-950 transition-colors",
+                        selected ? "border-primary ring-2 ring-primary/30" : "border-border/60 hover:border-foreground/30"
                       )}
                     >
-                      <Play className="size-5" />
-                      <span className="text-[11px] font-medium">Show Video</span>
+                      {m.thumb ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- signed R2 URL, not optimizable
+                        <img src={m.thumb} alt="" onError={() => markFailed(m.url)} className="h-full w-full object-cover" />
+                      ) : (
+                        <span className="flex h-full w-full items-center justify-center text-zinc-400">
+                          <Play className="size-4" />
+                        </span>
+                      )}
+                      <span className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1 text-[9px] leading-4 text-white">{m.label}</span>
                     </button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Tier 2: Ever Cloud AI Forensic Intelligence Card */}
-          <Card className="border-border/60">
-            <CardHeader className="pb-3 border-b border-border/40">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <Sparkles className="size-4" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-sm font-semibold text-foreground">
-                      Ever Cloud AI Forensic Intelligence (Tier 2)
-                    </CardTitle>
-                    <p className="text-xs text-muted-foreground">
-                      Deep vision reasoning, scene narrative & threat verdict
-                    </p>
-                  </div>
-                </div>
-
-                <Badge variant="outline" className={`text-xs ${statusColors[event.status] || "border-border"}`}>
-                  {event.status.replace(/_/g, " ")}
-                </Badge>
+                  );
+                })}
               </div>
-            </CardHeader>
-            <CardContent className="pt-4 space-y-4 text-xs">
-              <AiAnalysisSections event={event} />
+            )}
+          </div>
 
-              {/* False Alarm Notice if present */}
+          <CardShell
+            title="AI analysis"
+            info="What our cloud AI concluded for each snapshot and clip of this event, in its own words."
+          >
+            <div className="space-y-3">
+              <AiAnalysisSections event={event} />
               {event.falseAlarmReason && (
-                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-700 dark:text-amber-400 flex items-start gap-3 mt-2">
-                  <AlertTriangle className="size-5 shrink-0 mt-0.5 text-amber-500" />
+                <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
+                  <AlertTriangle className="mt-px size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
                   <div>
-                    <p className="font-semibold text-sm">False Alarm Reason Recorded</p>
-                    <p className="mt-1 text-muted-foreground leading-relaxed">{event.falseAlarmReason}</p>
+                    <p className="font-medium text-foreground">Why it was marked a false alarm</p>
+                    <p className="mt-0.5 leading-relaxed text-muted-foreground">{event.falseAlarmReason}</p>
                   </div>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </CardShell>
         </div>
 
-        {/* Right Column (Hardware EdgeBox, Customer, Triage & Notifications) */}
-        <div className="space-y-6">
-          {/* Manual review: the operator opens a modal to settle or overrule the AI */}
-          <Card className="border-border/60 shadow-xs">
-            <CardHeader className="pb-3 border-b border-border/40">
-              <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <ShieldAlert className="size-4 text-primary" />
-                Decision
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4 space-y-3 text-xs">
-              {(() => {
-                const decision = describeEventDecision(event);
-                return (
-                  <div>
-                    <p className="font-semibold text-foreground">{decision.title}</p>
-                    {decision.detail && <p className="mt-1 text-muted-foreground leading-relaxed">{decision.detail}</p>}
-                  </div>
-                );
-              })()}
-              <Button type="button" variant="outline" size="sm" className="w-full text-xs gap-1.5" onClick={() => setReviewOpen(true)}>
+        <div className="flex flex-col gap-4">
+          <CardShell title="Decision">
+            <div className="space-y-3 text-xs">
+              <div>
+                <p className="font-medium text-foreground">{decision.title}</p>
+                {decision.detail && <p className="mt-0.5 leading-relaxed text-muted-foreground">{decision.detail}</p>}
+              </div>
+              <Button type="button" variant="outline" size="sm" className="w-full gap-1.5 text-xs" onClick={() => setReviewOpen(true)}>
                 <ShieldAlert className="size-3.5" />
                 Review manually
               </Button>
-              <ManualReviewDialog event={event} open={reviewOpen} onOpenChange={setReviewOpen} onDone={fetchEvent} />
-            </CardContent>
-          </Card>
+              <ManualReviewDialog event={event} open={reviewOpen} onOpenChange={setReviewOpen} onDone={refresh} />
+            </div>
+          </CardShell>
 
-          {/* Tier 1: On-Premise EdgeBox Detection Hardware Card */}
-          <Card className="border-border/60">
-            <CardHeader className="pb-3 border-b border-border/40">
-              <div className="flex items-center gap-2">
-                <Cpu className="size-4 text-primary" />
-                <CardTitle className="text-sm font-semibold text-foreground">
-                  On-Premise EdgeBox (Tier 1)
-                </CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-4 space-y-3 text-xs">
-              <div className="p-3 bg-muted/40 rounded-lg border border-border/40 space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Edge Detection:</span>
-                  <span className="font-semibold text-foreground">{event.edgeLabel}</span>
-                </div>
-                {event.edgeConfidence !== null && event.edgeConfidence !== undefined && (
-                  <div className="space-y-1">
-                    <div className="flex justify-between items-center text-[11px]">
-                      <span className="text-muted-foreground">Model Confidence:</span>
-                      <span className="font-mono font-medium text-foreground">
-                        {Math.round(event.edgeConfidence * 100)}%
-                      </span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className="bg-primary h-1.5 rounded-full transition-all"
-                        style={{ width: `${Math.min(100, Math.round(event.edgeConfidence * 100))}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
+          <CardShell title="What was detected" info={DETECTION_INFO}>
+            <DetectionSummary event={event} bare />
+          </CardShell>
 
-              <div className="flex justify-between items-center pb-2 border-b border-border/40">
-                <span className="text-muted-foreground">Hardware Box ID:</span>
-                <span className="font-mono font-medium text-foreground">{event.deviceId || "Unassigned"}</span>
-              </div>
+          <CardShell title="Source">
+            <Facts
+              items={[
+                {
+                  label: "Customer",
+                  value: event.businessAccountId ? (
+                    <Link href={`/dashboard/customers/${event.businessAccountId}`} className="hover:text-primary hover:underline">
+                      {event.account?.name || "Open customer"}
+                    </Link>
+                  ) : (
+                    event.account?.name
+                  ),
+                },
+                {
+                  label: "Device",
+                  mono: true,
+                  value: event.deviceId && (
+                    <Link href={`/dashboard/devices/${encodeURIComponent(event.deviceId)}`} className="hover:text-primary hover:underline">
+                      {event.deviceId}
+                    </Link>
+                  ),
+                },
+                { label: "Model", value: event.device?.modelCode },
+                { label: "Camera", value: event.camera?.name },
+                { label: "Channel", value: event.channelNumber ?? null, mono: true },
+                { label: "Event ID", value: <span title={event.id}>{event.id}</span>, mono: true },
+              ]}
+            />
+          </CardShell>
 
-              <div className="flex justify-between items-center pb-2 border-b border-border/40">
-                <span className="text-muted-foreground">Device Model:</span>
-                <span className="font-medium text-foreground">{event.device?.modelCode || "EdgeBox"}</span>
-              </div>
-
-              <div className="flex justify-between items-center pb-2 border-b border-border/40">
-                <span className="text-muted-foreground">Camera Stream:</span>
-                <span className="font-semibold text-foreground">{cameraName}</span>
-              </div>
-
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">RTSP Channel:</span>
-                <span className="font-mono font-medium text-foreground">Channel {event.channelNumber || 1}</span>
-              </div>
-
-              {event.deviceId && (
-                <Link
-                  href={`/dashboard/devices?selected=${event.deviceId}`}
-                  scroll={true}
-                  className={cn(
-                    buttonVariants({ variant: "outline", size: "sm" }),
-                    "w-full text-xs gap-1.5 border-border hover:bg-muted mt-2"
-                  )}
-                >
-                  <ExternalLink className="size-3.5" />
-                  Inspect Device Hardware
-                </Link>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Alert Dispatch & Email Variations Card */}
-          <Card className="border-border/60">
-            <CardHeader className="pb-3 border-b border-border/40">
-              <div className="flex items-center gap-2">
-                <Bell className="size-4 text-primary" />
-                <CardTitle className="text-sm font-semibold text-foreground">
-                  Alert Dispatch & Notifications
-                </CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-4 space-y-3 text-xs">
-              {event.alertChannels && event.alertChannels.length > 0 ? (
-                <>
-                  <div className="space-y-1.5">
-                    <span className="text-muted-foreground block text-[11px]">Dispatched Channels:</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {event.alertChannels.map((ch, idx) => (
-                        <Badge
-                          key={idx}
-                          variant="secondary"
-                          className="text-xs uppercase font-mono px-2.5 py-0.5 flex items-center gap-1"
-                        >
-                          {ch === "EMAIL" && <Mail className="size-3" />}
-                          {ch}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Email variation details */}
-                  <div className="p-3 bg-muted/30 rounded-lg border border-border/40 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-foreground flex items-center gap-1.5">
-                        <Mail className="size-3.5 text-primary" />
-                        {emailVariation.name}
-                      </span>
-                      <Badge variant="outline" className={`text-[10px] ${emailVariation.badgeColor}`}>
-                        {emailVariation.badge}
-                      </Badge>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      {emailVariation.desc}
-                    </p>
-                  </div>
-
-                  {event.alertDispatchedAt && (
-                    <div className="flex justify-between items-center text-[11px] pt-1">
-                      <span className="text-muted-foreground">Dispatched At:</span>
-                      <span className="font-mono text-foreground">
-                        {new Date(event.alertDispatchedAt).toLocaleString()}
-                      </span>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="p-3 bg-muted/20 rounded-lg border border-border/40 text-center space-y-1">
-                  <span className="text-muted-foreground font-medium block">No Alert Dispatched</span>
-                  <p className="text-[11px] text-muted-foreground">
-                    Threat level remained below automatic customer escalation threshold.
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Customer Store Site Card */}
-          <Card className="border-border/60">
-            <CardHeader className="pb-3 border-b border-border/40">
-              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Building2 className="size-3.5 text-primary" />
-                Customer Site
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4 space-y-3 text-xs">
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Site Name:</span>
-                <span className="font-semibold text-foreground">{customerName}</span>
-              </div>
-
-              {event.businessAccountId && (
-                <Link
-                  href={`/dashboard/customers/${event.businessAccountId}`}
-                  className={cn(
-                    buttonVariants({ variant: "outline", size: "sm" }),
-                    "w-full text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/5 mt-2"
-                  )}
-                >
-                  <ExternalLink className="size-3.5" />
-                  Open Customer & Fleet Profile
-                </Link>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Telemetry Timestamps Card */}
-          <Card className="border-border/60">
-            <CardHeader className="pb-3 border-b border-border/40">
-              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Clock className="size-3.5 text-primary" />
-                Telemetry Timestamps
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4 space-y-2 text-xs">
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Registered:</span>
-                <span className="font-mono text-foreground">{new Date(event.createdAt).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Last Updated:</span>
-                <span className="font-mono text-muted-foreground">{new Date(event.updatedAt).toLocaleString()}</span>
-              </div>
-            </CardContent>
-          </Card>
+          <EventTimeline event={event} />
         </div>
       </div>
 
-      {/* Full-Screen Keyframe Image Inspection Modal */}
-      {enlargedImage && (
+      {enlarged && (
         <div
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-4"
-          onClick={() => setEnlargedImage(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Snapshot, full size"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setEnlarged(null)}
         >
-          <div
-            className="relative max-w-4xl max-h-[90vh] bg-zinc-950 rounded-xl overflow-hidden border border-zinc-800 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between bg-zinc-900/90 px-4 py-2.5 border-b border-zinc-800">
-              <span className="text-xs font-semibold text-zinc-300 flex items-center gap-2">
-                <Camera className="size-4 text-primary" />
-                Keyframe Snapshot Evidence
-              </span>
-              <button
-                type="button"
-                onClick={() => setEnlargedImage(null)}
-                className="text-zinc-400 hover:text-white p-1 rounded-md"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-            <img
-              src={enlargedImage}
-              alt="Enlarged Keyframe"
-              className="max-h-[80vh] w-auto object-contain mx-auto"
-            />
-          </div>
+          <button type="button" aria-label="Close" className="absolute right-4 top-4 rounded-md p-1.5 text-zinc-300 hover:text-white">
+            <X className="size-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element -- signed R2 URL, not optimizable */}
+          <img src={enlarged} alt="" className="max-h-[90vh] max-w-full rounded-md object-contain" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
     </div>

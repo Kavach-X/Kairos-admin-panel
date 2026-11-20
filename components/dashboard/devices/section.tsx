@@ -21,7 +21,7 @@ export function SubTitle({ children, right }: { children: React.ReactNode; right
 }
 
 /** The one card surface used everywhere on the device page. */
-export const CARD = "rounded-xl border border-border bg-card p-4";
+export const CARD = "rounded-lg border border-border/60 bg-card p-4";
 
 /** Small label above a value, for key/value grids. */
 export function Field({

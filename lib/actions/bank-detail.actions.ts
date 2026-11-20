@@ -1,5 +1,6 @@
 "use server";
 
+import { backendFetch } from "@/lib/backend-fetch";
 import { headers, cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { verifyAdminAccess } from "@/lib/session";
@@ -43,7 +44,7 @@ export async function getBankDetailsAction(): Promise<{
 }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(`${BACKEND_URL}/api/v1/admin/bank-details`, {
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/admin/bank-details`, {
       headers: reqHeaders,
       cache: "no-store",
     });
@@ -64,7 +65,7 @@ export async function toggleBankDetailActiveAction(
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const reqHeaders = await getAdminHeaders();
-    const res = await fetch(
+    const res = await backendFetch(
       `${BACKEND_URL}/api/v1/admin/bank-details/${encodeURIComponent(id)}/status`,
       {
         method: "PATCH",

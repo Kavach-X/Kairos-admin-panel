@@ -1,6 +1,7 @@
 import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
-import { getDeviceModelsAction, getVendorsListAction } from "@/lib/actions/device.actions";
+import { getDeviceModelsAction, getDevicesAction, getVendorsListAction } from "@/lib/actions/device.actions";
+import type { AnalyticsFilterOptions } from "@/lib/types";
 
 /**
  * Slow-changing reference lists, cached per browser session ("use cache: private":
@@ -13,6 +14,7 @@ import { getDeviceModelsAction, getVendorsListAction } from "@/lib/actions/devic
  */
 const MODELS_TAG = "device-models"; // cleared by create/updateDeviceModelAction
 const VENDORS_TAG = "vendors-list"; // cleared by verifyVendorAction
+const ANALYTICS_FILTERS_TAG = "analytics-filter-options"; // time-based only: a new device appears within 5 min
 
 type ModelsResult = Awaited<ReturnType<typeof getDeviceModelsAction>>;
 type VendorsResult = Awaited<ReturnType<typeof getVendorsListAction>>;
@@ -48,5 +50,39 @@ export async function getVendorsList(): Promise<VendorsResult> {
     return await cachedVendorsList();
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : "Failed to fetch vendors" };
+  }
+}
+
+/**
+ * Device / customer pickers for the analytics filters, projected down to ids and names.
+ * Customers are derived from device owners: only accounts with devices can have events.
+ */
+async function cachedAnalyticsFilterOptions(): Promise<AnalyticsFilterOptions> {
+  "use cache: private";
+  cacheTag(ANALYTICS_FILTERS_TAG);
+  cacheLife({ stale: 60, revalidate: 300, expire: 900 });
+  const res = await getDevicesAction({ limit: 250 });
+  if (!res.success || !res.data) throw new Error(res.error || "Failed to fetch devices");
+
+  const customers = new Map<string, string>();
+  const devices = res.data.items.map((d) => {
+    const accountId = d.ownerBusinessAccount?.id ?? d.businessAccountId ?? null;
+    const accountName = d.ownerBusinessAccount?.name ?? null;
+    if (accountId && accountName) customers.set(accountId, accountName);
+    return { deviceId: d.device_id, accountId, accountName };
+  });
+
+  return {
+    devices: devices.sort((a, b) => a.deviceId.localeCompare(b.deviceId)),
+    customers: Array.from(customers, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
+  };
+}
+
+export async function getAnalyticsFilterOptions(): Promise<AnalyticsFilterOptions> {
+  try {
+    return await cachedAnalyticsFilterOptions();
+  } catch {
+    // Filters degrade to "all" rather than failing the page.
+    return { devices: [], customers: [] };
   }
 }

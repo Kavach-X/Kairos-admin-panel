@@ -25,7 +25,7 @@ export function NeedsAttentionCard({
   const hasPendingItems = openTickets > 0 || pendingVendors > 0;
 
   return (
-    <Card className="border-border/60 bg-card shadow-sm">
+    <Card className="border-border/60 bg-card">
       <CardHeader className="pb-2 pt-4 px-5 border-b border-border/40">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">

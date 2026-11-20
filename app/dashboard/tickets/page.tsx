@@ -3,11 +3,11 @@ import { getTicketsAction } from "@/lib/actions/ticket.actions";
 import { getCustomersAction } from "@/lib/actions/customer.actions";
 import { getDevicesAction } from "@/lib/actions/device.actions";
 import { TicketsPageClient } from "@/components/dashboard/tickets/tickets-page-client";
-import { ListPageSkeleton } from "@/components/dashboard/page-skeletons";
+import { TablePageSkeleton } from "@/components/dashboard/page-skeletons";
 
 export default function TicketsPage() {
   return (
-    <Suspense fallback={<ListPageSkeleton />}>
+    <Suspense fallback={<TablePageSkeleton tabs={5} columns={7} />}>
       <TicketsData />
     </Suspense>
   );
@@ -17,7 +17,7 @@ async function TicketsData() {
   const [ticketRes, customerRes, deviceRes] = await Promise.all([
     getTicketsAction({}),
     getCustomersAction(),
-    getDevicesAction(),
+    getDevicesAction({ limit: 250 }),
   ]);
 
   return (
