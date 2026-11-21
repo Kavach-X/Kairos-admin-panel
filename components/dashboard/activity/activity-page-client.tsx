@@ -5,7 +5,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Activity, ArrowUp, Camera, ChartColumn, HardDrive, Loader2, Search, Video, X, Building2, Keyboard } from "lucide-react";
+import { Activity, ArrowUp, Camera, ChartColumn, Download, HardDrive, Loader2, Search, Video, X, Building2, Keyboard } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,6 +13,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { getEventsAction, type EventStatusCounts } from "@/lib/actions/event.actions";
 import type { AnalyticsFilterOptions, CameraEventDetail, CameraEventItem, EventIncidentStatus } from "@/lib/types";
 import { EventRangePicker } from "./event-range-picker";
+import { ExportEventsDialog } from "./export-events-dialog";
 import {
   EVENT_TABS,
   eventFiltersToQuery,
@@ -76,6 +77,7 @@ export function ActivityPageClient({
   const now = nowMs === null ? null : new Date(nowMs);
 
   const [filters, setFilters] = React.useState<EventFilters>(initialFilters);
+  const [exportOpen, setExportOpen] = React.useState(false);
   const [searchInput, setSearchInput] = React.useState(initialFilters.q ?? "");
   const [events, setEvents] = React.useState<CameraEventItem[]>(initial.events);
   const [nextCursor, setNextCursor] = React.useState<string | null>(initial.nextCursor);
@@ -282,6 +284,10 @@ export function ActivityPageClient({
             <ChartColumn className="size-3.5" />
             Analytics
           </Link>
+          <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setExportOpen(true)}>
+            <Download className="size-3.5" />
+            Export
+          </Button>
         </div>
       </div>
 
@@ -548,6 +554,8 @@ export function ActivityPageClient({
           </div>
         )}
       </div>
+
+      <ExportEventsDialog open={exportOpen} onOpenChange={setExportOpen} initialFilters={filters} />
     </div>
   );
 }

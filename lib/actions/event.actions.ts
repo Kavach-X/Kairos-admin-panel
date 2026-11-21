@@ -348,3 +348,48 @@ export async function reviewEventAction(
     return { success: false, error: err?.message || "Network error reviewing event" };
   }
 }
+
+export interface EventExportRow {
+  eventId: string;
+  detectedAt: string;
+  status: EventIncidentStatus;
+  edgeLabel: string;
+  edgeConfidence: number | null;
+  deviceId: string;
+  thumbnailUrl: string | null;
+  videoUrls: string[];
+}
+
+export async function exportEventsAction(params: {
+  /** Comma-separated statuses; omit for every status. */
+  status?: string;
+  label?: string;
+  /** Edge confidence floor, 0–1. */
+  minConfidence?: number;
+  startDate?: string;
+  endDate?: string;
+}): Promise<{
+  success: boolean;
+  data?: { items: EventExportRow[]; truncated: boolean; limit: number };
+  error?: string;
+}> {
+  try {
+    const reqHeaders = await getAdminHeaders();
+    const searchParams = new URLSearchParams();
+    if (params.status) searchParams.set("status", params.status);
+    if (params.label) searchParams.set("label", params.label);
+    if (params.minConfidence !== undefined) searchParams.set("minConfidence", String(params.minConfidence));
+    if (params.startDate) searchParams.set("startDate", params.startDate);
+    if (params.endDate) searchParams.set("endDate", params.endDate);
+
+    const res = await backendFetch(`${BACKEND_URL}/api/v1/events/admin/export?${searchParams}`, {
+      headers: reqHeaders,
+      cache: "no-store",
+    });
+    const json = await res.json();
+    if (!res.ok) return { success: false, error: json?.message || "Failed to export events" };
+    return { success: true, data: json.data };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Network error exporting events" };
+  }
+}
